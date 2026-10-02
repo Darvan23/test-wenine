@@ -3,6 +3,7 @@
      Everyone can view it; only a logged-in admin can change it.
      Styling:  css/stylesheet.css      Behavior: schedule.js
      ============================================================ -->
+<meta charset="utf-8">
 <title>Wenine Schedule</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -11,11 +12,15 @@
 
 <div class="wrap">
   <header class="top">
-    <h1 class="wordmark">Wenine <small>schedule</small></h1>
+    <h1 class="wordmark">Wenine <small data-i18n="subSchedule">schedule</small></h1>
     <nav class="page-nav">
-      <a href="index.html">Hour tracker</a>
-      <a href="schedule.html" class="current">Schedule</a>
+      <a href="index.html" data-i18n="navHours">Hour tracker</a>
+      <a href="schedule.html" class="current" data-i18n="navSchedule">Schedule</a>
     </nav>
+    <select class="lang-sel" id="langSel" aria-label="Language">
+      <option value="en">EN</option>
+      <option value="nl">NL</option>
+    </select>
     <div class="admin-area" id="adminArea"></div>
   </header>
 
@@ -27,12 +32,12 @@
 <div class="overlay hidden" id="dayOverlay" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
   <div class="modal">
     <h3 id="dayTitle"></h3>
-    <div class="modal-sub">Set each person to working or free. Leave on “—” to keep them off this day.</div>
+    <div class="modal-sub" data-i18n="schedModalSub">Set each person to working or free. Leave on “—” to keep them off this day.</div>
     <div id="rowsArea"></div>
     <div class="modal-actions">
       <span class="spacer"></span>
-      <button class="btn ghost" id="btnCancelDay" type="button">Cancel</button>
-      <button class="btn primary" id="btnSaveDay" type="button">Save</button>
+      <button class="btn ghost" id="btnCancelDay" type="button" data-i18n="cancel">Cancel</button>
+      <button class="btn primary" id="btnSaveDay" type="button" data-i18n="save">Save</button>
     </div>
   </div>
 </div>
@@ -40,24 +45,25 @@
 <!-- ================== admin login pop-up ==================== -->
 <div class="overlay hidden" id="loginOverlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
   <div class="modal">
-    <h3 id="loginTitle">Admin login</h3>
-    <div class="modal-sub">Only admins can change the schedule. Everyone can view it.</div>
+    <h3 id="loginTitle" data-i18n="loginTitle">Admin login</h3>
+    <div class="modal-sub" data-i18n="loginSub">Only admins can change the schedule. Everyone can view it.</div>
     <div class="field">
-      <label for="inEmail">Email</label>
+      <label for="inEmail" data-i18n="email">Email</label>
       <input type="email" id="inEmail" autocomplete="username" placeholder="admin@wenine.app">
     </div>
     <div class="field">
-      <label for="inPassword">Password</label>
+      <label for="inPassword" data-i18n="password">Password</label>
       <input type="password" id="inPassword" autocomplete="current-password">
     </div>
     <div class="modal-actions">
       <span class="spacer"></span>
-      <button class="btn ghost" id="btnCancelLogin" type="button">Cancel</button>
-      <button class="btn primary" id="btnDoLogin" type="button">Log in</button>
+      <button class="btn ghost" id="btnCancelLogin" type="button" data-i18n="cancel">Cancel</button>
+      <button class="btn primary" id="btnDoLogin" type="button" data-i18n="loginBtn">Log in</button>
     </div>
   </div>
 </div>
 
 <div id="toast"></div>
 
+<script src="i18n.js"></script>
 <script src="schedule.js"></script>

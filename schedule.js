@@ -20,9 +20,11 @@
     messagingSenderId: '57113093874',
     appId: '1:57113093874:web:c108078d8141c6db10d26b'
   };
-  var DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  var DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  /* all visible text comes from i18n.js (window.WenineLang) */
+  var L = window.WenineLang;
+  var DAY_NAMES = L.arr('dayNamesFull');
+  var DAY_SHORT = L.arr('dayShort');
+  var MONTHS = L.arr('monthsFull');
 
   var state = {
     people: {},     // id -> {id,name,start,end}
@@ -89,7 +91,7 @@
         state.people = m;
         state.ready = true;
         render();
-      }, function () { showToast('Could not load the staff list.'); });
+      }, function () { showToast(L.t('toastStaff')); });
 
       var now = new Date();
       state.view = { y: now.getFullYear(), m: now.getMonth() };
@@ -101,7 +103,7 @@
       main.textContent = '';
       var n = document.createElement('div');
       n.className = 'notice';
-      n.textContent = 'The schedule needs an internet connection to the Wenine database. Open this page on the live website.';
+      n.textContent = L.t('offlineNotice');
       main.appendChild(n);
     });
   }
@@ -120,7 +122,7 @@
       snap.forEach(function (d) { m[d.id] = d.data(); });
       state.sched = m;
       render();
-    }, function () { showToast('No access to the schedule — check the Firestore rules.'); });
+    }, function () { showToast(L.t('toastSchedRules')); });
   }
 
   /* ===================== rendering ===================== */
@@ -135,14 +137,14 @@
     var area = document.getElementById('adminArea');
     area.textContent = '';
     if (state.admin) {
-      area.appendChild(el('span', 'admin-pill on', 'Admin — editing on'));
-      var out = el('button', 'icon-btn', 'Log out');
+      area.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
+      var out = el('button', 'icon-btn', L.t('logout'));
       out.type = 'button';
       out.addEventListener('click', function () { authFns.signOut(auth); });
       area.appendChild(out);
     } else {
-      area.appendChild(el('span', 'admin-pill', 'View only'));
-      var btn = el('button', 'icon-btn', 'Admin login');
+      area.appendChild(el('span', 'admin-pill', L.t('viewOnly')));
+      var btn = el('button', 'icon-btn', L.t('adminLogin'));
       btn.type = 'button';
       btn.addEventListener('click', openLogin);
       area.appendChild(btn);
@@ -153,7 +155,7 @@
     var main = document.getElementById('mainArea');
     main.textContent = '';
     if (!state.view) {
-      main.appendChild(el('div', 'notice', 'Connecting…'));
+      main.appendChild(el('div', 'notice', L.t('connecting')));
       return;
     }
     main.appendChild(renderMonthbar());
@@ -176,9 +178,9 @@
       });
       return b;
     }
-    bar.appendChild(navBtn('‹', -1, 'Previous month'));
+    bar.appendChild(navBtn('‹', -1, L.t('prevMonth')));
     bar.appendChild(el('h2', null, MONTHS[state.view.m] + ' ' + state.view.y));
-    bar.appendChild(navBtn('›', 1, 'Next month'));
+    bar.appendChild(navBtn('›', 1, L.t('nextMonth')));
 
     var legend = el('div', 'legend');
     function key(cls, txt) {
@@ -187,9 +189,9 @@
       k.appendChild(document.createTextNode(txt));
       return k;
     }
-    legend.appendChild(key('worked', 'working'));
-    legend.appendChild(key('free', 'free'));
-    legend.appendChild(el('span', 'key', 'Mondays closed'));
+    legend.appendChild(key('worked', L.t('legWorking')));
+    legend.appendChild(key('free', L.t('legFree')));
+    legend.appendChild(el('span', 'key', L.t('legMondays')));
     bar.appendChild(legend);
     return bar;
   }
@@ -225,10 +227,12 @@
     if (closed) cell.classList.add('closed');
     if (ds === tStr) cell.classList.add('today');
 
-    cell.appendChild(el('div', 'daynum', String(d.getDate())));
+    var head = el('div', 'daynum', String(d.getDate()));
+    if (ds === tStr) head.setAttribute('data-today', L.t('today'));
+    cell.appendChild(head);
 
     if (closed) {
-      cell.appendChild(el('div', 'closed-label', 'Closed'));
+      cell.appendChild(el('div', 'closed-label', L.t('closed')));
       return cell;
     }
 
@@ -242,8 +246,8 @@
         chip.appendChild(el('span', 'ptime', e.from + '–' + e.to));
       }
       chip.title = p.name + ': ' + (e.status === 'working'
-        ? 'working' + (e.from && e.to ? ' ' + e.from + '–' + e.to : '')
-        : 'free');
+        ? L.t('legWorking') + (e.from && e.to ? ' ' + e.from + '–' + e.to : '')
+        : L.t('legFree'));
       cell.appendChild(chip);
     });
     return cell;
@@ -280,7 +284,7 @@
       row.appendChild(el('span', 'rname', p.name));
 
       var sel = document.createElement('select');
-      [['', '—'], ['working', 'Working'], ['free', 'Free']].forEach(function (o) {
+      [['', '—'], ['working', L.t('optWorking')], ['free', L.t('optFree')]].forEach(function (o) {
         var opt = document.createElement('option');
         opt.value = o[0]; opt.textContent = o[1];
         sel.appendChild(opt);
@@ -292,7 +296,7 @@
       var from = document.createElement('input'); from.type = 'time'; from.value = e && e.from ? e.from : '';
       var to = document.createElement('input'); to.type = 'time'; to.value = e && e.to ? e.to : '';
       tw.appendChild(from);
-      tw.appendChild(document.createTextNode('to'));
+      tw.appendChild(document.createTextNode(L.t('timeTo')));
       tw.appendChild(to);
       row.appendChild(tw);
 
@@ -307,7 +311,7 @@
     });
 
     if (!anyone) {
-      rowsArea.appendChild(el('div', 'modal-sub', 'Nobody is available on this day — check each person’s work period on the hour tracker page.'));
+      rowsArea.appendChild(el('div', 'modal-sub', L.t('nobodyAvail')));
     }
     dayOverlay.classList.remove('hidden');
   }
@@ -335,7 +339,7 @@
     Promise.all(writes).then(function () {
       closeDay();
     }).catch(function () {
-      showToast("Couldn't save — are you still logged in as admin?");
+      showToast(L.t('toastSchedSave'));
     });
   });
 
@@ -358,18 +362,18 @@
   function doLogin() {
     var email = inEmail.value.trim();
     var pw = inPassword.value;
-    if (!email || !pw) { showToast('Fill in the email and password.'); return; }
+    if (!email || !pw) { showToast(L.t('toastFill')); return; }
     authFns.signInWithEmailAndPassword(auth, email, pw).then(function () {
       closeLogin();
-      showToast('Logged in — you can now edit the schedule.');
+      showToast(L.t('toastLoggedIn'));
     }).catch(function (err) {
       var code = err && err.code ? err.code : '';
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-        showToast('Wrong email or password.');
+        showToast(L.t('toastWrong'));
       } else if (code === 'auth/too-many-requests') {
-        showToast('Too many attempts — wait a few minutes.');
+        showToast(L.t('toastTooMany'));
       } else {
-        showToast('Login failed. Is this website on the authorized domains list?');
+        showToast(L.t('toastLoginFail'));
       }
     });
   }
@@ -396,7 +400,22 @@
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3200);
   }
 
+  /* ===================== language ===================== */
+  var langSel = document.getElementById('langSel');
+  if (langSel) {
+    langSel.value = L.get();
+    langSel.addEventListener('change', function () { L.set(langSel.value); });
+  }
+  L.onChange(function () {
+    DAY_NAMES = L.arr('dayNamesFull');
+    DAY_SHORT = L.arr('dayShort');
+    MONTHS = L.arr('monthsFull');
+    renderAdminArea();
+    render();
+  });
+
   /* ===================== boot ===================== */
+  L.applyStatic();
   render();
   init();
 })();

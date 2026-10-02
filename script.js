@@ -27,9 +27,11 @@
     messagingSenderId: '57113093874',
     appId: '1:57113093874:web:c108078d8141c6db10d26b'
   };
-  var DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  var DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  /* all visible text comes from i18n.js (window.WenineLang) */
+  var L = window.WenineLang;
+  var DAY_NAMES = L.arr('dayNamesFull');
+  var DAY_SHORT = L.arr('dayShort');
+  var MONTHS = L.arr('monthsFull');
 
   var state = {
     people: {},          // id -> {id,name,start,end}
@@ -37,12 +39,15 @@
     personId: null,
     view: null,          // {y,m}
     loaded: false,
+    admin: null,         // logged-in admin user (cloud mode only)
     mode: null           // 'db' (claude.ai) | 'firebase' | 'local'
   };
   var store = null;      // {savePerson,deletePerson,saveEntry,deleteEntry}
   var dbRef = null;      // claude.ai database handle
   var fb = null;         // Firebase Firestore module (its functions)
   var fbDb = null;       // Firebase database handle
+  var authFns = null;    // Firebase Auth module (its functions)
+  var auth = null;       // Firebase Auth handle
   var entriesUnsub = null;
   var editingDate = null;
   var editingPersonId = null; // null = adding
@@ -122,9 +127,9 @@
       ensureSelection();
       render();
     }, function () {
-      showToast('Connection to shared storage lost.');
+      showToast(L.t('toastConnLost'));
     });
-    setStorageNote('Shared storage — everyone sees the same data');
+    setStorageNote('storageClaude');
   }
 
   /* Firebase: loads Google's Firestore library over the internet, then
@@ -134,11 +139,18 @@
     var base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/';
     return Promise.all([
       import(base + 'firebase-app.js'),
-      import(base + 'firebase-firestore.js')
+      import(base + 'firebase-firestore.js'),
+      import(base + 'firebase-auth.js')
     ]).then(function (mods) {
       var app = mods[0].initializeApp(FIREBASE_CONFIG);
       fb = mods[1];
       fbDb = fb.getFirestore(app);
+      authFns = mods[2];
+      auth = authFns.getAuth(app);
+      authFns.onAuthStateChanged(auth, function (user) {
+        state.admin = user || null;
+        render();
+      });
       state.mode = 'firebase';
       store = {
         savePerson: function (p) { return fb.setDoc(fb.doc(fbDb, 'people', p.id), p); },
@@ -155,22 +167,22 @@
         ensureSelection();
         render();
       }, function () {
-        showToast('No access to the database — check the Firestore rules.');
+        showToast(L.t('toastDbRules'));
       });
-      setStorageNote('Shared cloud storage — everyone sees the same data');
+      setStorageNote('storageCloud');
     });
   }
 
   /* The very first time the cloud database is seen empty from this
      browser, create Darvan's calendar so the app doesn't start blank. */
   function seedIfEmpty() {
-    if (state.mode !== 'firebase' || Object.keys(state.people).length > 0) return;
+    if (state.mode !== 'firebase' || !state.admin || Object.keys(state.people).length > 0) return;
     var seeded = false;
     try { seeded = !!localStorage.getItem(LS_SEEDED); } catch (e) { }
     if (seeded) return;
     try { localStorage.setItem(LS_SEEDED, '1'); } catch (e) { }
     store.savePerson({ id: 'darvan', name: 'Darvan', start: DEFAULT_START, end: DEFAULT_END })
-      .catch(function () { showToast("Couldn't write to the database — check the Firestore rules."); });
+      .catch(function () { showToast(L.t('toastSeedFail')); });
   }
 
   function initLocal() {
@@ -198,13 +210,13 @@
     state.loaded = true;
     ensureSelection();
     render();
-    setStorageNote('Saved in this browser');
+    setStorageNote('storageLocal');
   }
 
   function persistLocal() {
     try {
       localStorage.setItem(LS_DATA, JSON.stringify({ people: state.people, entries: state.entries }));
-    } catch (e) { showToast('Could not save — browser storage is full or blocked.'); }
+    } catch (e) { showToast(L.t('toastStorageFull')); }
   }
 
   /* Listen to one person's logged days. Re-subscribes when you switch
@@ -218,7 +230,7 @@
         snap.docs.forEach(function (d) { if (d.exists) { m[d.id] = d.data(); } });
         state.entries = m;
         render();
-      }, function () { showToast('Could not load this calendar.'); });
+      }, function () { showToast(L.t('toastCalLoad')); });
     } else if (state.mode === 'firebase' && fbDb) {
       state.entries = {};
       var q = fb.query(fb.collection(fbDb, 'entries'), fb.where('personId', '==', pid));
@@ -227,7 +239,7 @@
         snap.forEach(function (d) { m[d.id] = d.data(); });
         state.entries = m;
         render();
-      }, function () { showToast('Could not load this calendar.'); });
+      }, function () { showToast(L.t('toastCalLoad')); });
     }
   }
 
@@ -250,6 +262,11 @@
     try { localStorage.setItem(LS_UI, JSON.stringify({ personId: id })); } catch (e) { }
     subscribeEntries(id);
     render();
+  }
+
+  /* people management: open in claude/local modes, admin-only in cloud mode */
+  function canManagePeople() {
+    return state.mode !== 'firebase' || !!state.admin;
   }
 
   /* ===================== computations ===================== */
@@ -309,7 +326,11 @@
     if (text != null) n.textContent = text;
     return n;
   }
-  function setStorageNote(t) { document.getElementById('storageNote').textContent = t; }
+  var storageKey = null;
+  function setStorageNote(key) {
+    storageKey = key;
+    document.getElementById('storageNote').textContent = key ? L.t(key) : '';
+  }
 
   function render() {
     renderPeople();
@@ -320,7 +341,7 @@
     var row = document.getElementById('peopleRow');
     row.textContent = '';
     if (!state.loaded) {
-      row.appendChild(el('span', 'storage-note', 'Loading…'));
+      row.appendChild(el('span', 'storage-note', L.t('loading')));
       return;
     }
     var ids = Object.keys(state.people).sort(function (a, b) {
@@ -333,22 +354,34 @@
       b.addEventListener('click', function () { selectPerson(id); });
       row.appendChild(b);
     });
-    var add = el('button', 'chip add', '+ Add person');
-    add.type = 'button';
-    add.addEventListener('click', function () { openPersonModal(null); });
-    row.appendChild(add);
+    if (canManagePeople()) {
+      var add = el('button', 'chip add', L.t('addPerson'));
+      add.type = 'button';
+      add.addEventListener('click', function () { openPersonModal(null); });
+      row.appendChild(add);
+    }
 
+    var meta = el('div', 'person-meta');
     if (state.personId && state.people[state.personId]) {
       var p = state.people[state.personId];
-      var meta = el('div', 'person-meta');
-      var rng = el('span', 'range', shortDate(p.start) + ' – ' + shortDate(p.end));
-      var edit = el('button', 'icon-btn', 'Edit');
-      edit.type = 'button';
-      edit.setAttribute('aria-label', 'Edit ' + p.name);
-      edit.addEventListener('click', function () { openPersonModal(p.id); });
-      meta.appendChild(rng); meta.appendChild(edit);
-      row.appendChild(meta);
+      meta.appendChild(el('span', 'range', shortDate(p.start) + ' – ' + shortDate(p.end)));
+      if (canManagePeople()) {
+        var edit = el('button', 'icon-btn', L.t('edit'));
+        edit.type = 'button';
+        edit.setAttribute('aria-label', L.t('edit') + ' ' + p.name);
+        edit.addEventListener('click', function () { openPersonModal(p.id); });
+        meta.appendChild(edit);
+      }
     }
+    if (state.mode === 'firebase') {
+      var ab = el('button', 'icon-btn', state.admin ? L.t('logout') : L.t('adminLogin'));
+      ab.type = 'button';
+      ab.addEventListener('click', function () {
+        if (state.admin) authFns.signOut(auth); else openLogin();
+      });
+      meta.appendChild(ab);
+    }
+    if (meta.childNodes.length) row.appendChild(meta);
   }
 
   function renderMain() {
@@ -358,12 +391,14 @@
 
     if (!state.personId) {
       var es = el('div', 'empty-state');
-      es.appendChild(el('div', 'big', 'No calendars yet'));
-      es.appendChild(el('div', null, 'Add a person to start tracking hours.'));
-      var b = el('button', 'btn primary', '+ Add person');
-      b.type = 'button'; b.style.marginTop = '16px';
-      b.addEventListener('click', function () { openPersonModal(null); });
-      es.appendChild(b);
+      es.appendChild(el('div', 'big', L.t('emptyBig')));
+      es.appendChild(el('div', null, L.t('emptyText')));
+      if (canManagePeople()) {
+        var b = el('button', 'btn primary', L.t('addPerson'));
+        b.type = 'button'; b.style.marginTop = '16px';
+        b.addEventListener('click', function () { openPersonModal(null); });
+        es.appendChild(b);
+      }
       main.appendChild(es);
       return;
     }
@@ -389,10 +424,11 @@
       if (sub) s.appendChild(el('div', 'sub', sub));
       return s;
     }
-    box.appendChild(stat('Total counted', t.counted, 'h', 'weekend hours count ×2', true));
-    box.appendChild(stat('Hours on the floor', t.base, 'h', 'actual time worked'));
-    box.appendChild(stat('Weekend bonus', t.bonus, 'h', 'extra from Sat & Sun'));
-    box.appendChild(stat('Days worked', t.days, t.days === 1 ? 'day' : 'days', shortDate(person.start) + ' – ' + shortDate(person.end)));
+    var hu = L.t('hourUnit');
+    box.appendChild(stat(L.t('statTotal'), t.counted, hu, L.t('statTotalSub'), true));
+    box.appendChild(stat(L.t('statFloor'), t.base, hu, L.t('statFloorSub')));
+    box.appendChild(stat(L.t('statBonus'), t.bonus, hu, L.t('statBonusSub')));
+    box.appendChild(stat(L.t('statDays'), t.days, t.days === 1 ? L.t('dayOne') : L.t('dayMany'), shortDate(person.start) + ' – ' + shortDate(person.end)));
     return box;
   }
 
@@ -404,13 +440,13 @@
     var ei = monthIndex(e.getFullYear(), e.getMonth());
 
     var prev = el('button', 'nav-btn', '‹'); prev.type = 'button';
-    prev.setAttribute('aria-label', 'Previous month');
+    prev.setAttribute('aria-label', L.t('prevMonth'));
     prev.disabled = vi <= si;
     prev.addEventListener('click', function () {
       var i = vi - 1; state.view = { y: Math.floor(i / 12), m: i % 12 }; render();
     });
     var next = el('button', 'nav-btn', '›'); next.type = 'button';
-    next.setAttribute('aria-label', 'Next month');
+    next.setAttribute('aria-label', L.t('nextMonth'));
     next.disabled = vi >= ei;
     next.addEventListener('click', function () {
       var i = vi + 1; state.view = { y: Math.floor(i / 12), m: i % 12 }; render();
@@ -427,10 +463,10 @@
       k.appendChild(document.createTextNode(txt));
       return k;
     }
-    legend.appendChild(key('worked', 'worked'));
-    legend.appendChild(key('free', 'free'));
-    legend.appendChild(key('x2', 'weekend ×2'));
-    var mono = el('span', 'key', 'Mondays closed');
+    legend.appendChild(key('worked', L.t('legWorked')));
+    legend.appendChild(key('free', L.t('legFree')));
+    legend.appendChild(key('x2', L.t('legX2')));
+    var mono = el('span', 'key', L.t('legMondays'));
     legend.appendChild(mono);
     bar.appendChild(legend);
     return bar;
@@ -440,7 +476,7 @@
     var scroll = el('div', 'cal-scroll');
     var cal = el('div', 'cal');
     DAY_SHORT.forEach(function (d) { cal.appendChild(el('div', 'head', d)); });
-    cal.appendChild(el('div', 'head weekcol', 'Week'));
+    cal.appendChild(el('div', 'head weekcol', L.t('weekCol')));
 
     var y = state.view.y, m = state.view.m;
     var monthStart = new Date(y, m, 1);
@@ -460,9 +496,9 @@
       var wt = weekTotals(person.id, monday);
       var wcell = el('div', 'cell weektotal');
       wcell.appendChild(el('div', 'wk', 'W' + isoWeek(monday)));
-      wcell.appendChild(el('div', 'hrs', fmtH(wt.counted) + ' h'));
-      if (wt.bonus > 0) wcell.appendChild(el('div', 'bonus', 'incl. +' + fmtH(wt.bonus) + ' bonus'));
-      wcell.title = 'Week of ' + shortDate(fmtDate(monday)) + ': ' + fmtH(wt.base) + ' h worked, counts as ' + fmtH(wt.counted) + ' h';
+      wcell.appendChild(el('div', 'hrs', fmtH(wt.counted) + ' ' + L.t('hourUnit')));
+      if (wt.bonus > 0) wcell.appendChild(el('div', 'bonus', L.t('inclBonus', { x: fmtH(wt.bonus) })));
+      wcell.title = L.t('weekTitle', { d: shortDate(fmtDate(monday)), b: fmtH(wt.base), c: fmtH(wt.counted) });
       cal.appendChild(wcell);
     }
     scroll.appendChild(cal);
@@ -487,13 +523,14 @@
     if (ds === tStr) cell.classList.add('today');
 
     var head = el('div', 'daynum', String(d.getDate()));
+    if (ds === tStr) head.setAttribute('data-today', L.t('today'));
     if (isWeekend(d) && inRange) {
       head.appendChild(el('span', 'badge-x2', '×2'));
     }
     cell.appendChild(head);
 
     if (closed && inRange) {
-      cell.appendChild(el('div', 'closed-label', 'Closed'));
+      cell.appendChild(el('div', 'closed-label', L.t('closed')));
       return cell;
     }
     if (!inRange) return cell;
@@ -502,12 +539,12 @@
     if (e) {
       if (e.status === 'worked') {
         var h = +e.hours || 0;
-        var chip = el('span', 'entry-chip worked', fmtH(h) + ' h');
-        if (isWeekend(d)) chip.title = 'Counts as ' + fmtH(h * 2) + ' h (weekend ×2)';
+        var chip = el('span', 'entry-chip worked', fmtH(h) + ' ' + L.t('hourUnit'));
+        if (isWeekend(d)) chip.title = L.t('countsAsTitle', { h: fmtH(h * 2) });
         cell.appendChild(chip);
         if (e.from && e.to) cell.appendChild(el('div', 'times', e.from + ' – ' + e.to));
       } else {
-        cell.appendChild(el('span', 'entry-chip free', 'Free'));
+        cell.appendChild(el('span', 'entry-chip free', L.t('free')));
       }
       if (e.note) {
         var nm = el('div', 'notemark', '✎ ' + e.note);
@@ -536,9 +573,9 @@
     sub.textContent = '';
     sub.appendChild(document.createTextNode(state.people[state.personId].name + ' · '));
     if (isWeekend(d)) {
-      sub.appendChild(el('span', 'x2note', 'weekend — hours count double'));
+      sub.appendChild(el('span', 'x2note', L.t('subWeekend')));
     } else {
-      sub.appendChild(document.createTextNode('weekday — hours count once'));
+      sub.appendChild(document.createTextNode(L.t('subWeekday')));
     }
     editStatus = e ? e.status : 'worked';
     inFrom.value = e && e.from ? e.from : '';
@@ -568,9 +605,9 @@
     var h = inHours.value !== '' ? +inHours.value : (auto != null ? auto : 0);
     if (editingDate == null) return;
     var weekend = isWeekend(parseDate(editingDate));
-    calcLine.appendChild(document.createTextNode('Counts as '));
-    calcLine.appendChild(el('strong', null, fmtH(weekend ? h * 2 : h) + ' h'));
-    if (weekend && h > 0) calcLine.appendChild(el('span', 'x2', '(×2 weekend)'));
+    calcLine.appendChild(document.createTextNode(L.t('countsAs')));
+    calcLine.appendChild(el('strong', null, fmtH(weekend ? h * 2 : h) + ' ' + L.t('hourUnit')));
+    if (weekend && h > 0) calcLine.appendChild(el('span', 'x2', L.t('x2weekend')));
   }
   function onTimesChanged() {
     var auto = calcHours(inFrom.value, inTo.value);
@@ -594,21 +631,21 @@
       note: inNote.value.trim()
     };
     if (entry.status === 'worked' && entry.hours === 0 && !entry.note) {
-      showToast('Add the times or the hours first.');
+      showToast(L.t('toastHoursFirst'));
       return;
     }
     var key = entry.personId + '_' + entry.date;
     store.saveEntry(entry).then(function () {
       state.entries[key] = entry;
       closeDayModal(); render();
-    }).catch(function () { showToast("Couldn't save — you may not have edit access."); });
+    }).catch(function () { showToast(L.t('toastSaveFail')); });
   });
   document.getElementById('btnDeleteEntry').addEventListener('click', function () {
     if (!editingDate) return;
     var key = state.personId + '_' + editingDate;
     store.deleteEntry(key).then(function () {
       closeDayModal(); render();
-    }).catch(function () { showToast("Couldn't clear this day."); });
+    }).catch(function () { showToast(L.t('toastClearFail')); });
   });
 
   /* ===================== person modal ===================== */
@@ -620,13 +657,13 @@
   function openPersonModal(id) {
     editingPersonId = id;
     var p = id ? state.people[id] : null;
-    document.getElementById('personTitle').textContent = p ? 'Edit ' + p.name : 'Add person';
+    document.getElementById('personTitle').textContent = p ? L.t('personTitleEdit', { n: p.name }) : L.t('personTitleAdd');
     inName.value = p ? p.name : '';
     inStart.value = p ? p.start : DEFAULT_START;
     inEnd.value = p ? p.end : DEFAULT_END;
     var del = document.getElementById('btnDeletePerson');
     del.classList.toggle('hidden', !p);
-    del.textContent = 'Remove person';
+    del.textContent = L.t('removePerson');
     deleteArmed = false;
     personOverlay.classList.remove('hidden');
     inName.focus();
@@ -636,9 +673,9 @@
   document.getElementById('btnCancelPerson').addEventListener('click', closePersonModal);
   document.getElementById('btnSavePerson').addEventListener('click', function () {
     var name = inName.value.trim();
-    if (!name) { showToast('Give this person a name.'); return; }
-    if (!inStart.value || !inEnd.value) { showToast('Pick both dates.'); return; }
-    if (inEnd.value < inStart.value) { showToast('The end date is before the start date.'); return; }
+    if (!name) { showToast(L.t('toastName')); return; }
+    if (!inStart.value || !inEnd.value) { showToast(L.t('toastDates')); return; }
+    if (inEnd.value < inStart.value) { showToast(L.t('toastEndBeforeStart')); return; }
     var id = editingPersonId;
     if (!id) {
       id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'person';
@@ -651,14 +688,14 @@
       state.view = null;
       selectPerson(id);
       render();
-    }).catch(function () { showToast("Couldn't save — you may not have edit access."); });
+    }).catch(function () { showToast(L.t('toastSaveFail')); });
   });
   var deleteArmed = false;
   document.getElementById('btnDeletePerson').addEventListener('click', function () {
     if (!editingPersonId) return;
     if (!deleteArmed) {
       deleteArmed = true;
-      this.textContent = 'Click again to remove for good';
+      this.textContent = L.t('removeConfirm');
       return;
     }
     var pid = editingPersonId;
@@ -674,14 +711,51 @@
       state.personId = null;
       ensureSelection();
       render();
-    }).catch(function () { showToast("Couldn't remove this person."); });
+    }).catch(function () { showToast(L.t('toastRemoveFail')); });
   });
 
+  /* ===================== admin login (cloud mode) ===================== */
+  var loginOverlay = document.getElementById('loginOverlay');
+  var inEmail = document.getElementById('inEmail');
+  var inPassword = document.getElementById('inPassword');
+
+  function openLogin() {
+    inPassword.value = '';
+    loginOverlay.classList.remove('hidden');
+    inEmail.focus();
+  }
+  function closeLogin() { loginOverlay.classList.add('hidden'); }
+
+  document.getElementById('btnCancelLogin').addEventListener('click', closeLogin);
+  document.getElementById('btnDoLogin').addEventListener('click', doLogin);
+  inPassword.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
+
+  function doLogin() {
+    var email = inEmail.value.trim();
+    var pw = inPassword.value;
+    if (!email || !pw) { showToast(L.t('toastFill')); return; }
+    authFns.signInWithEmailAndPassword(auth, email, pw).then(function () {
+      closeLogin();
+      showToast(L.t('toastLoggedIn'));
+    }).catch(function (err) {
+      var code = err && err.code ? err.code : '';
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+        showToast(L.t('toastWrong'));
+      } else if (code === 'auth/too-many-requests') {
+        showToast(L.t('toastTooMany'));
+      } else {
+        showToast(L.t('toastLoginFail'));
+      }
+    });
+  }
+
   /* ===================== shared UI ===================== */
-  [dayOverlay, personOverlay].forEach(function (ov) {
+  [dayOverlay, personOverlay, loginOverlay].forEach(function (ov) {
     ov.addEventListener('mousedown', function (ev) {
       if (ev.target === ov) {
-        if (ov === dayOverlay) closeDayModal(); else closePersonModal();
+        if (ov === dayOverlay) closeDayModal();
+        else if (ov === personOverlay) closePersonModal();
+        else closeLogin();
       }
     });
   });
@@ -689,6 +763,7 @@
     if (ev.key === 'Escape') {
       if (!dayOverlay.classList.contains('hidden')) closeDayModal();
       if (!personOverlay.classList.contains('hidden')) closePersonModal();
+      if (!loginOverlay.classList.contains('hidden')) closeLogin();
     }
   });
 
@@ -701,7 +776,22 @@
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3200);
   }
 
+  /* ===================== language ===================== */
+  var langSel = document.getElementById('langSel');
+  if (langSel) {
+    langSel.value = L.get();
+    langSel.addEventListener('change', function () { L.set(langSel.value); });
+  }
+  L.onChange(function () {
+    DAY_NAMES = L.arr('dayNamesFull');
+    DAY_SHORT = L.arr('dayShort');
+    MONTHS = L.arr('monthsFull');
+    setStorageNote(storageKey);
+    render();
+  });
+
   /* ===================== boot ===================== */
+  L.applyStatic();
   render();
   initStorage();
 })();

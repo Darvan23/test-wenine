@@ -423,7 +423,7 @@ button.cell:hover {
 }
 
 .cell.today .daynum::after {
-  content: "today";
+  content: attr(data-today);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: .08em;
@@ -816,3 +816,10 @@ button.cell:hover {
   border:1px dashed var(--line-strong); border-radius:14px; padding:50px 20px;
   text-align:center; color:var(--muted); margin-top:24px;
 }
+
+/* language dropdown in the header */
+.lang-sel{
+  border:1px solid var(--line-strong); background:var(--surface); color:var(--muted);
+  border-radius:8px; padding:5px 8px; font-size:13px; font-weight:600; cursor:pointer;
+}
+.lang-sel:hover{ color:var(--accent); border-color:var(--accent); }
