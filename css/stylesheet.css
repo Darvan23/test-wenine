@@ -837,7 +837,7 @@ button.cell:hover {
 .mode-seg button.on{ background:var(--surface); color:var(--accent); box-shadow:0 1px 3px rgba(43,32,36,.18); }
 
 .listgrid{
-  display:grid; grid-template-columns:repeat(auto-fill, minmax(350px, 1fr));
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(min(350px, 100%), 1fr));
   gap:16px; align-items:start;
 }
 .mcard{ border:1px solid var(--line); border-radius:12px; background:var(--surface); overflow:hidden; }
@@ -935,3 +935,73 @@ button.cell:hover {
 .mtab .b-conf{ font-size:11px; }
 .mtab .b-admin{ font-size:11px; color:var(--accent); }
 .mtab tr.locked .cin{ color:var(--muted); }
+
+/* ============================================================
+   Phones & narrow screens
+   ============================================================ */
+@media (max-width: 720px){
+  .wrap{ padding:16px 12px 60px; }
+  .wordmark{ font-size:26px; }
+  .wordmark small{ margin-left:6px; letter-spacing:.1em; }
+  header.top{ row-gap:8px; align-items:center; }
+  .page-nav a{ padding:5px 10px; font-size:12.5px; }
+  .storage-note{ width:100%; order:10; }
+
+  .people{ padding:10px 0 12px; }
+  .chip{ padding:6px 13px; font-size:13px; }
+  .person-meta{ margin-left:0; width:100%; justify-content:space-between; }
+
+  .summary{ margin:14px 0; }
+  .stat{ padding:12px 14px; }
+  .stat .value{ font-size:22px; }
+  .stat .label{ font-size:10px; letter-spacing:.1em; }
+
+  /* month bar: arrows + title on one line, switch next to them,
+     legend drops to its own full-width line below */
+  .monthbar{ flex-wrap:wrap; gap:10px; }
+  .monthbar h2{ font-size:20px; min-width:0; flex:1 1 auto; }
+  .nav-btn{ width:32px; height:32px; font-size:15px; }
+  .mode-seg button{ padding:5px 11px; font-size:12px; }
+  .monthbar .legend{ margin-left:0; width:100%; gap:10px; row-gap:4px; }
+  .dash-hint{ margin-top:0; }
+
+  /* calendar: smaller cells so less sideways scrolling is needed */
+  .cal{ min-width:600px; grid-template-columns:repeat(7, 1fr) 72px; }
+  .cal .head{ padding:6px 6px; font-size:9.5px; letter-spacing:.06em; }
+  .cell{ min-height:66px; padding:4px 5px; gap:2px; }
+  .cell .daynum{ font-size:11.5px; }
+  .badge-x2{ font-size:9px; padding:0 4px; }
+  .entry-chip{ font-size:11px; padding:1px 6px; border-radius:6px; }
+  .cell .times{ font-size:9.5px; }
+  .cell .notemark{ font-size:9.5px; }
+  .cell.closed .closed-label{ font-size:9px; letter-spacing:.06em; }
+  .weektotal .hrs{ font-size:14px; }
+  .weektotal .wk{ font-size:9px; }
+  .weektotal .bonus{ font-size:9.5px; }
+
+  /* schedule grid */
+  .cal.sched{ min-width:560px; }
+  .pchip{ font-size:11px; padding:1px 6px; }
+
+  /* list view: one month per row; the table scrolls inside its card */
+  .mcard{ overflow-x:auto; }
+  .mtab td{ padding:3px 5px; }
+  .mtab th{ padding:5px 5px 3px; }
+  .mtab .cin-time{ width:56px; }
+  .mtab .cin-uren{ width:44px; }
+  .mtab .cin-note{ min-width:80px; }
+
+  /* admin dashboard */
+  .adash td{ padding:4px 6px; }
+  .acell{ min-width:76px; }
+
+  .modal{ padding:18px; }
+  .modal h3{ font-size:19px; }
+}
+
+/* phone: let the nav wrap, and give the view switcher its own line */
+@media (max-width: 720px){
+  .page-nav{ flex-wrap:wrap; }
+  .monthbar .mode-seg{ order:5; flex-basis:100%; width:max-content; }
+  .monthbar .legend{ order:6; }
+}
