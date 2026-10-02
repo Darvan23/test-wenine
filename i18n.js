@@ -122,7 +122,34 @@ window.WenineLang = (function () {
       toastWrong: 'Wrong email or password.',
       toastTooMany: 'Too many attempts — wait a few minutes.',
       toastLoginFail: 'Login failed. Is this website on the authorized domains list?',
-      toastLoggedIn: 'Logged in — admin rights active.'
+      toastLoggedIn: 'Logged in.',
+
+      gateTitle: 'Log in',
+      gateSub: 'Log in to see the Wenine hours. Students and admin each use their own account.',
+      gateRegisterQ: 'First time here? Create your account',
+      gateLoginQ: 'Already have an account? Log in',
+      registerBtn: 'Create account',
+      toastRegistered: 'Account created — you are logged in.',
+      toastEmailInUse: 'There is already an account with this email.',
+      toastWeakPw: 'The password must be at least 6 characters.',
+      toastNotYours: 'You can only change your own calendar.',
+      noPersonLinked: 'Your account ({e}) is not linked to a calendar yet — ask the admin to add your email to your profile.',
+      personEmail: 'Student email (for their login)',
+
+      reqTitle: 'Requests',
+      reqNew: 'New request',
+      reqTypeFree: 'Day off',
+      reqTypeSick: 'Sick',
+      reqSend: 'Send request',
+      reqPending: 'pending',
+      reqApproved: 'approved',
+      reqRejected: 'rejected',
+      reqApprove: 'Approve',
+      reqReject: 'Reject',
+      reqCancel: 'Withdraw',
+      reqNone: 'No requests yet.',
+      toastReqSent: 'Request sent — waiting for the admin.',
+      toastReqApproved: 'Approved — the day is set to free on the schedule.'
     },
 
     /* ---------------- Nederlands ---------------- */
@@ -235,7 +262,34 @@ window.WenineLang = (function () {
       toastWrong: 'Verkeerd e-mailadres of wachtwoord.',
       toastTooMany: 'Te veel pogingen — wacht een paar minuten.',
       toastLoginFail: 'Inloggen mislukt. Staat deze website in de lijst met toegestane domeinen?',
-      toastLoggedIn: 'Ingelogd — adminrechten actief.'
+      toastLoggedIn: 'Ingelogd.',
+
+      gateTitle: 'Inloggen',
+      gateSub: 'Log in om de Wenine-uren te zien. Studenten en admin gebruiken elk hun eigen account.',
+      gateRegisterQ: 'Eerste keer hier? Maak je account aan',
+      gateLoginQ: 'Heb je al een account? Inloggen',
+      registerBtn: 'Account aanmaken',
+      toastRegistered: 'Account aangemaakt — je bent ingelogd.',
+      toastEmailInUse: 'Er bestaat al een account met dit e-mailadres.',
+      toastWeakPw: 'Het wachtwoord moet minstens 6 tekens zijn.',
+      toastNotYours: 'Je kunt alleen je eigen kalender wijzigen.',
+      noPersonLinked: 'Je account ({e}) is nog niet gekoppeld aan een kalender — vraag de admin om je e-mail aan je profiel toe te voegen.',
+      personEmail: 'E-mail student (voor hun login)',
+
+      reqTitle: 'Aanvragen',
+      reqNew: 'Nieuwe aanvraag',
+      reqTypeFree: 'Vrije dag',
+      reqTypeSick: 'Ziek',
+      reqSend: 'Aanvraag versturen',
+      reqPending: 'in afwachting',
+      reqApproved: 'goedgekeurd',
+      reqRejected: 'afgewezen',
+      reqApprove: 'Goedkeuren',
+      reqReject: 'Afwijzen',
+      reqCancel: 'Intrekken',
+      reqNone: 'Nog geen aanvragen.',
+      toastReqSent: 'Aanvraag verstuurd — wachten op de admin.',
+      toastReqApproved: 'Goedgekeurd — de dag staat als vrij in het rooster.'
     }
   };
 

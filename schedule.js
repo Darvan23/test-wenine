@@ -27,10 +27,12 @@
   var MONTHS = L.arr('monthsFull');
 
   var state = {
-    people: {},     // id -> {id,name,start,end}
+    people: {},     // id -> {id,name,start,end,email}
     sched: {},      // "pid_date" -> {personId,date,status:'working'|'free',from,to}
+    requests: {},   // "pid_date" -> {personId,date,type,note,status}
     view: null,     // {y,m} month being shown
-    admin: null,    // the logged-in Firebase user, or null
+    user: null,     // any logged-in user
+    admin: null,    // the user again, when they are an admin
     ready: false
   };
   var fb = null;        // Firestore module
@@ -38,6 +40,8 @@
   var authFns = null;   // Auth module
   var auth = null;      // auth handle
   var schedUnsub = null;
+  var peopleUnsub = null;
+  var reqUnsub = null;
   var editingDate = null;
 
   /* ===================== date helpers ===================== */
@@ -79,23 +83,48 @@
       authFns = mods[2];
       auth = authFns.getAuth(app);
 
+      var now = new Date();
+      state.view = { y: now.getFullYear(), m: now.getMonth() };
+
+      /* everything is behind the login — data loads only once signed in */
       authFns.onAuthStateChanged(auth, function (user) {
-        state.admin = user || null;
+        state.user = user || null;
+        state.admin = null;
+        if (!user) {
+          if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
+          if (schedUnsub) { schedUnsub(); schedUnsub = null; }
+          if (reqUnsub) { reqUnsub(); reqUnsub = null; }
+          state.people = {}; state.sched = {}; state.requests = {}; state.ready = false;
+          renderAdminArea();
+          render();
+          return;
+        }
+        fb.getDoc(fb.doc(fbDb, 'admins', (user.email || '').toLowerCase())).then(function (s) {
+          state.admin = s.exists() ? user : null;
+          renderAdminArea();
+          render();
+        }).catch(function () { });
+        if (!peopleUnsub) {
+          peopleUnsub = fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
+            var m = {};
+            snap.forEach(function (d) { m[d.id] = d.data(); });
+            state.people = m;
+            state.ready = true;
+            render();
+          }, function () { showToast(L.t('toastStaff')); });
+        }
+        subscribeMonth();
+        if (!reqUnsub) {
+          reqUnsub = fb.onSnapshot(fb.collection(fbDb, 'requests'), function (snap) {
+            var m = {};
+            snap.forEach(function (d) { m[d.id] = d.data(); });
+            state.requests = m;
+            render();
+          }, function () { });
+        }
         renderAdminArea();
         render();
       });
-
-      fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
-        var m = {};
-        snap.forEach(function (d) { m[d.id] = d.data(); });
-        state.people = m;
-        state.ready = true;
-        render();
-      }, function () { showToast(L.t('toastStaff')); });
-
-      var now = new Date();
-      state.view = { y: now.getFullYear(), m: now.getMonth() };
-      subscribeMonth();
       renderAdminArea();
       render();
     }).catch(function () {
@@ -110,6 +139,7 @@
 
   /* listen to this month's schedule; called again on month change */
   function subscribeMonth() {
+    if (!fb || !state.user) return;
     if (schedUnsub) { schedUnsub(); schedUnsub = null; }
     var r = gridRange(state.view.y, state.view.m);
     var q = fb.query(
@@ -136,19 +166,25 @@
   function renderAdminArea() {
     var area = document.getElementById('adminArea');
     area.textContent = '';
-    if (state.admin) {
-      area.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
-      var out = el('button', 'icon-btn', L.t('logout'));
-      out.type = 'button';
-      out.addEventListener('click', function () { authFns.signOut(auth); });
-      area.appendChild(out);
-    } else {
-      area.appendChild(el('span', 'admin-pill', L.t('viewOnly')));
-      var btn = el('button', 'icon-btn', L.t('adminLogin'));
-      btn.type = 'button';
-      btn.addEventListener('click', openLogin);
-      area.appendChild(btn);
-    }
+    if (!state.user) return;
+    if (state.admin) area.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
+    else area.appendChild(el('span', 'admin-pill', L.t('viewOnly')));
+    var out = el('button', 'icon-btn', L.t('logout'));
+    out.type = 'button';
+    out.title = state.user.email || '';
+    out.addEventListener('click', function () { authFns.signOut(auth); });
+    area.appendChild(out);
+  }
+
+  /* which calendar belongs to the logged-in student? */
+  function myPersonId() {
+    if (!state.user || !state.user.email) return null;
+    var em = state.user.email.toLowerCase();
+    var hit = null;
+    Object.keys(state.people).forEach(function (id) {
+      if ((state.people[id].email || '').toLowerCase() === em) hit = id;
+    });
+    return hit;
   }
 
   function render() {
@@ -158,8 +194,10 @@
       main.appendChild(el('div', 'notice', L.t('connecting')));
       return;
     }
+    if (fb && !state.user) { renderGate(main); return; }
     main.appendChild(renderMonthbar());
     main.appendChild(renderCalendar());
+    main.appendChild(renderRequests());
   }
 
   function renderMonthbar() {
@@ -343,52 +381,174 @@
     });
   });
 
-  /* ===================== login ===================== */
-  var loginOverlay = document.getElementById('loginOverlay');
-  var inEmail = document.getElementById('inEmail');
-  var inPassword = document.getElementById('inPassword');
+  /* ============== requests: ask for a day off / call in sick ============== */
+  function reqTypeLabel(t) { return t === 'sick' ? L.t('reqTypeSick') : L.t('reqTypeFree'); }
 
-  function openLogin() {
-    inPassword.value = '';
-    loginOverlay.classList.remove('hidden');
-    inEmail.focus();
-  }
-  function closeLogin() { loginOverlay.classList.add('hidden'); }
+  function renderRequests() {
+    var box = el('div', 'plan-card req-box');
+    box.appendChild(el('h3', null, L.t('reqTitle')));
+    var mine = myPersonId();
 
-  document.getElementById('btnCancelLogin').addEventListener('click', closeLogin);
-  document.getElementById('btnDoLogin').addEventListener('click', doLogin);
-  inPassword.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
-
-  function doLogin() {
-    var email = inEmail.value.trim();
-    var pw = inPassword.value;
-    if (!email || !pw) { showToast(L.t('toastFill')); return; }
-    authFns.signInWithEmailAndPassword(auth, email, pw).then(function () {
-      closeLogin();
-      showToast(L.t('toastLoggedIn'));
-    }).catch(function (err) {
-      var code = err && err.code ? err.code : '';
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-        showToast(L.t('toastWrong'));
-      } else if (code === 'auth/too-many-requests') {
-        showToast(L.t('toastTooMany'));
-      } else {
-        showToast(L.t('toastLoginFail'));
+    /* students get a small form; the admin answers instead of asking */
+    if (mine && !state.admin) {
+      var form = el('div', 'req-form');
+      function field(labelKey, input) {
+        var f = el('div', 'field');
+        f.appendChild(el('label', null, L.t(labelKey)));
+        f.appendChild(input);
+        return f;
       }
+      var iDate = document.createElement('input');
+      iDate.type = 'date';
+      iDate.min = todayStr();
+      var iType = document.createElement('select');
+      [['free', 'reqTypeFree'], ['sick', 'reqTypeSick']].forEach(function (o) {
+        var opt = document.createElement('option');
+        opt.value = o[0]; opt.textContent = L.t(o[1]);
+        iType.appendChild(opt);
+      });
+      var iNote = document.createElement('input');
+      iNote.type = 'text';
+      iNote.maxLength = 120;
+      var send = el('button', 'btn primary', L.t('reqSend'));
+      send.type = 'button';
+      send.addEventListener('click', function () {
+        var ds = iDate.value;
+        if (!ds) { showToast(L.t('toastDates')); return; }
+        if (isMonday(parseDate(ds))) { showToast(L.t('legMondays')); return; }
+        var r = {
+          personId: mine, date: ds, type: iType.value,
+          note: iNote.value.trim(), status: 'pending'
+        };
+        fb.setDoc(fb.doc(fbDb, 'requests', mine + '_' + ds), r).then(function () {
+          showToast(L.t('toastReqSent'));
+        }).catch(function () { showToast(L.t('toastSaveFail')); });
+      });
+      form.appendChild(field('colDate', iDate));
+      form.appendChild(field('reqNew', iType));
+      form.appendChild(field('note', iNote));
+      form.appendChild(send);
+      box.appendChild(form);
+    }
+
+    var list = Object.keys(state.requests).map(function (k) { return state.requests[k]; })
+      .filter(function (r) { return state.admin ? true : r.personId === mine; })
+      .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+
+    if (!list.length) {
+      box.appendChild(el('div', 'modal-sub', L.t('reqNone')));
+      return box;
+    }
+    list.forEach(function (r) {
+      var row = el('div', 'req-row');
+      row.appendChild(el('span', 'rdate', niceDate(r.date)));
+      if (state.admin) {
+        var p = state.people[r.personId];
+        row.appendChild(el('span', 'rtype', (p ? p.name : r.personId) + ' · ' + reqTypeLabel(r.type)));
+      } else {
+        row.appendChild(el('span', 'rtype', reqTypeLabel(r.type)));
+      }
+      if (r.note) row.appendChild(el('span', 'rnote', r.note));
+      row.appendChild(el('span', 'badge-st ' + r.status, L.t('req' + r.status.charAt(0).toUpperCase() + r.status.slice(1))));
+      if (state.admin && r.status === 'pending') {
+        var ok = el('button', 'btn small', L.t('reqApprove'));
+        ok.type = 'button';
+        ok.addEventListener('click', function () { decideRequest(r, true); });
+        var no = el('button', 'btn small danger', L.t('reqReject'));
+        no.type = 'button';
+        no.addEventListener('click', function () { decideRequest(r, false); });
+        row.appendChild(ok); row.appendChild(no);
+      }
+      if (!state.admin && r.status === 'pending') {
+        var cx = el('button', 'btn small ghost', L.t('reqCancel'));
+        cx.type = 'button';
+        cx.addEventListener('click', function () {
+          fb.deleteDoc(fb.doc(fbDb, 'requests', r.personId + '_' + r.date))
+            .catch(function () { showToast(L.t('toastSaveFail')); });
+        });
+        row.appendChild(cx);
+      }
+      box.appendChild(row);
     });
+    return box;
+  }
+
+  /* admin decides: approving also puts the day as "free" on the schedule */
+  function decideRequest(r, approved) {
+    var upd = {};
+    Object.keys(r).forEach(function (k) { upd[k] = r[k]; });
+    upd.status = approved ? 'approved' : 'rejected';
+    var p = fb.setDoc(fb.doc(fbDb, 'requests', r.personId + '_' + r.date), upd);
+    if (approved) {
+      p = p.then(function () {
+        return fb.setDoc(fb.doc(fbDb, 'schedule', r.personId + '_' + r.date), {
+          personId: r.personId, date: r.date, status: 'free', from: '', to: ''
+        });
+      });
+    }
+    p.then(function () {
+      if (approved) showToast(L.t('toastReqApproved'));
+    }).catch(function () { showToast(L.t('toastSaveFail')); });
+  }
+
+  /* ============== login gate (login comes first) ============== */
+  var gateMode = 'login';
+  function renderGate(main) {
+    var card = el('div', 'gate-card');
+    card.appendChild(el('h3', null, L.t(gateMode === 'login' ? 'gateTitle' : 'registerBtn')));
+    card.appendChild(el('div', 'modal-sub', L.t('gateSub')));
+    var fE = el('div', 'field');
+    fE.appendChild(el('label', null, L.t('email')));
+    var iE = document.createElement('input');
+    iE.type = 'email'; iE.autocomplete = 'username';
+    fE.appendChild(iE);
+    card.appendChild(fE);
+    var fP = el('div', 'field');
+    fP.appendChild(el('label', null, L.t('password')));
+    var iP = document.createElement('input');
+    iP.type = 'password';
+    iP.autocomplete = gateMode === 'login' ? 'current-password' : 'new-password';
+    fP.appendChild(iP);
+    card.appendChild(fP);
+    function submit() {
+      var em = iE.value.trim(), pw = iP.value;
+      if (!em || !pw) { showToast(L.t('toastFill')); return; }
+      var pr = gateMode === 'login'
+        ? authFns.signInWithEmailAndPassword(auth, em, pw)
+        : authFns.createUserWithEmailAndPassword(auth, em, pw);
+      pr.then(function () {
+        showToast(L.t(gateMode === 'login' ? 'toastLoggedIn' : 'toastRegistered'));
+      }).catch(function (err) { showToast(authErrText(err)); });
+    }
+    var go = el('button', 'btn primary', L.t(gateMode === 'login' ? 'loginBtn' : 'registerBtn'));
+    go.type = 'button';
+    go.addEventListener('click', submit);
+    iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
+    card.appendChild(go);
+    var sw = el('button', 'btn ghost gate-switch', L.t(gateMode === 'login' ? 'gateRegisterQ' : 'gateLoginQ'));
+    sw.type = 'button';
+    sw.addEventListener('click', function () {
+      gateMode = gateMode === 'login' ? 'register' : 'login';
+      render();
+    });
+    card.appendChild(sw);
+    main.appendChild(card);
+  }
+  function authErrText(err) {
+    var code = (err && err.code) || '';
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return L.t('toastWrong');
+    if (code === 'auth/email-already-in-use') return L.t('toastEmailInUse');
+    if (code === 'auth/weak-password') return L.t('toastWeakPw');
+    if (code === 'auth/too-many-requests') return L.t('toastTooMany');
+    return L.t('toastLoginFail');
   }
 
   /* ===================== shared UI ===================== */
-  [dayOverlay, loginOverlay].forEach(function (ov) {
-    ov.addEventListener('mousedown', function (ev) {
-      if (ev.target === ov) { if (ov === dayOverlay) closeDay(); else closeLogin(); }
-    });
+  dayOverlay.addEventListener('mousedown', function (ev) {
+    if (ev.target === dayOverlay) closeDay();
   });
   document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape') {
-      if (!dayOverlay.classList.contains('hidden')) closeDay();
-      if (!loginOverlay.classList.contains('hidden')) closeLogin();
-    }
+    if (ev.key === 'Escape' && !dayOverlay.classList.contains('hidden')) closeDay();
   });
 
   var toastTimer = null;

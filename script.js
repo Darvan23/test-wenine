@@ -41,7 +41,8 @@
     viewMode: 'cal',     // 'cal' (calendar) | 'list' (sheet) | 'plan' (planner)
     plan: null,          // current person's planner settings
     loaded: false,
-    admin: null,         // logged-in admin user (cloud mode only)
+    user: null,          // logged-in user (cloud mode only)
+    admin: null,         // the user again, when they are an admin
     mode: null           // 'db' (claude.ai) | 'firebase' | 'local'
   };
   var store = null;      // {savePerson,deletePerson,saveEntry,deleteEntry}
@@ -52,6 +53,7 @@
   var auth = null;       // Firebase Auth handle
   var entriesUnsub = null;
   var plannerUnsub = null;
+  var peopleUnsub = null;
   var localPlanner = {};   // planner settings per person (localStorage mode)
   var editingDate = null;
   var editingPersonId = null; // null = adding
@@ -152,11 +154,40 @@
       fbDb = fb.getFirestore(app);
       authFns = mods[2];
       auth = authFns.getAuth(app);
+      state.mode = 'firebase';
+
+      /* Everything is behind the login: data is only loaded once someone
+         is signed in, and cleared again when they sign out. */
       authFns.onAuthStateChanged(auth, function (user) {
-        state.admin = user || null;
+        state.user = user || null;
+        state.admin = null;
+        if (!user) {
+          if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
+          if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
+          if (plannerUnsub) { plannerUnsub(); plannerUnsub = null; }
+          state.people = {}; state.entries = {}; state.plan = null;
+          state.personId = null; state.loaded = false;
+          render();
+          return;
+        }
+        fb.getDoc(fb.doc(fbDb, 'admins', (user.email || '').toLowerCase())).then(function (s) {
+          state.admin = s.exists() ? user : null;
+          ensureSelection();
+          render();
+        }).catch(function () { });
+        if (!peopleUnsub) {
+          peopleUnsub = fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
+            var m = {};
+            snap.forEach(function (d) { m[d.id] = d.data(); });
+            state.people = m;
+            state.loaded = true;
+            seedIfEmpty();
+            ensureSelection();
+            render();
+          }, function () { showToast(L.t('toastDbRules')); });
+        }
         render();
       });
-      state.mode = 'firebase';
       store = {
         savePerson: function (p) { return fb.setDoc(fb.doc(fbDb, 'people', p.id), p); },
         deletePerson: function (id) { return fb.deleteDoc(fb.doc(fbDb, 'people', id)); },
@@ -164,17 +195,6 @@
         deleteEntry: function (key) { return fb.deleteDoc(fb.doc(fbDb, 'entries', key)); },
         savePlanner: function (p) { return fb.setDoc(fb.doc(fbDb, 'planner', p.personId), p); }
       };
-      fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
-        var m = {};
-        snap.forEach(function (d) { m[d.id] = d.data(); });
-        state.people = m;
-        state.loaded = true;
-        seedIfEmpty();
-        ensureSelection();
-        render();
-      }, function () {
-        showToast(L.t('toastDbRules'));
-      });
       setStorageNote('storageCloud');
     });
   }
@@ -278,7 +298,10 @@
     var saved = null;
     try { saved = (JSON.parse(localStorage.getItem(LS_UI) || '{}')).personId; } catch (e) { }
     if (state.personId && state.people[state.personId]) return;
-    state.personId = (saved && state.people[saved]) ? saved : (ids[0] || null);
+    var mine = myPersonId();
+    state.personId = (saved && state.people[saved]) ? saved
+      : (mine && state.people[mine]) ? mine
+        : (ids[0] || null);
     state.view = null;
     if (state.personId) subscribeEntries(state.personId);
   }
@@ -295,6 +318,22 @@
   /* people management: open in claude/local modes, admin-only in cloud mode */
   function canManagePeople() {
     return state.mode !== 'firebase' || !!state.admin;
+  }
+
+  /* which calendar belongs to the logged-in student? (matched by email) */
+  function myPersonId() {
+    if (state.mode !== 'firebase' || !state.user || !state.user.email) return null;
+    var em = state.user.email.toLowerCase();
+    var hit = null;
+    Object.keys(state.people).forEach(function (id) {
+      if ((state.people[id].email || '').toLowerCase() === em) hit = id;
+    });
+    return hit;
+  }
+
+  /* students may only change their own calendar; the admin changes any */
+  function canEditPerson(pid) {
+    return state.mode !== 'firebase' || !!state.admin || myPersonId() === pid;
   }
 
   function saveUI() {
@@ -377,6 +416,11 @@
   function render() {
     if (isEditingList()) { pendingRender = true; return; }
     pendingRender = false;
+    if (state.mode === 'firebase' && !state.user) {
+      document.getElementById('peopleRow').textContent = '';
+      renderGate(document.getElementById('mainArea'));
+      return;
+    }
     renderPeople();
     renderMain();
   }
@@ -423,12 +467,12 @@
         meta.appendChild(edit);
       }
     }
-    if (state.mode === 'firebase') {
-      var ab = el('button', 'icon-btn', state.admin ? L.t('logout') : L.t('adminLogin'));
+    if (state.mode === 'firebase' && state.user) {
+      if (state.admin) meta.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
+      var ab = el('button', 'icon-btn', L.t('logout'));
       ab.type = 'button';
-      ab.addEventListener('click', function () {
-        if (state.admin) authFns.signOut(auth); else openLogin();
-      });
+      ab.title = state.user.email || '';
+      ab.addEventListener('click', function () { authFns.signOut(auth); });
       meta.appendChild(ab);
     }
     if (meta.childNodes.length) row.appendChild(meta);
@@ -454,6 +498,9 @@
     }
 
     var person = state.people[state.personId];
+    if (state.mode === 'firebase' && state.user && !state.admin && !myPersonId()) {
+      main.appendChild(el('div', 'notice', L.t('noPersonLinked', { e: state.user.email || '' })));
+    }
     main.appendChild(renderSummary(person));
 
     if (state.viewMode === 'list') {
@@ -671,8 +718,9 @@
         nTd.appendChild(nIn);
         tr.appendChild(nTd);
 
-        /* a confirmed day is locked for everyone except the admin */
-        var locked = state.mode === 'firebase' && entry && entry.confirmed && !state.admin;
+        /* a confirmed day is locked for everyone except the admin;
+           other people's calendars are read-only for students */
+        var locked = (state.mode === 'firebase' && entry && entry.confirmed && !state.admin) || !canEditPerson(person.id);
         if (locked) {
           [uIn, fIn, tIn, nIn].forEach(function (i) { i.disabled = true; });
           tr.classList.add('locked');
@@ -700,6 +748,7 @@
           var key = person.id + '_' + ds;
           var existing = state.entries[key];
           var isAdmin = !!state.admin;
+          if (!canEditPerson(person.id)) { showToast(L.t('toastNotYours')); return; }
           if (state.mode === 'firebase' && existing && existing.confirmed && !isAdmin) {
             showToast(L.t('confirmedLock'));
             return;
@@ -805,7 +854,7 @@
     var inRange = ds >= startStr && ds <= endStr;
     var closed = isMonday(d);
     var e = entryFor(person.id, ds);
-    var locked = state.mode === 'firebase' && e && e.confirmed && !state.admin;
+    var locked = (state.mode === 'firebase' && e && e.confirmed && !state.admin) || !canEditPerson(person.id);
     var clickable = inRange && !closed && !locked;
 
     var cell = el(clickable ? 'button' : 'div', 'cell');
@@ -920,6 +969,7 @@
     var wrap = el('div', 'plan-wrap');
 
     function saveCfg() {
+      if (!canEditPerson(person.id)) { showToast(L.t('toastNotYours')); render(); return; }
       cfg.days.sort();
       var p = { personId: person.id, target: cfg.target, days: cfg.days, hoursPerDay: cfg.hoursPerDay };
       state.plan = p;
@@ -1124,6 +1174,7 @@
   document.getElementById('btnCancelDay').addEventListener('click', closeDayModal);
   document.getElementById('btnSaveDay').addEventListener('click', function () {
     if (!editingDate || !state.personId) return;
+    if (!canEditPerson(state.personId)) { showToast(L.t('toastNotYours')); return; }
     var prevE = entryFor(state.personId, editingDate);
     var entry = {
       personId: state.personId,
@@ -1149,6 +1200,7 @@
   });
   document.getElementById('btnDeleteEntry').addEventListener('click', function () {
     if (!editingDate) return;
+    if (!canEditPerson(state.personId)) { showToast(L.t('toastNotYours')); return; }
     var key = state.personId + '_' + editingDate;
     store.deleteEntry(key).then(function () {
       closeDayModal(); render();
@@ -1166,6 +1218,7 @@
     var p = id ? state.people[id] : null;
     document.getElementById('personTitle').textContent = p ? L.t('personTitleEdit', { n: p.name }) : L.t('personTitleAdd');
     inName.value = p ? p.name : '';
+    document.getElementById('inPersonEmail').value = p && p.email ? p.email : '';
     inStart.value = p ? p.start : DEFAULT_START;
     inEnd.value = p ? p.end : DEFAULT_END;
     var del = document.getElementById('btnDeletePerson');
@@ -1188,7 +1241,10 @@
       id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'person';
       id += '-' + Math.random().toString(36).slice(2, 6);
     }
-    var p = { id: id, name: name, start: inStart.value, end: inEnd.value };
+    var p = {
+      id: id, name: name, start: inStart.value, end: inEnd.value,
+      email: (document.getElementById('inPersonEmail').value || '').trim().toLowerCase()
+    };
     store.savePerson(p).then(function () {
       state.people[id] = p;
       closePersonModal();
@@ -1221,48 +1277,70 @@
     }).catch(function () { showToast(L.t('toastRemoveFail')); });
   });
 
-  /* ===================== admin login (cloud mode) ===================== */
-  var loginOverlay = document.getElementById('loginOverlay');
-  var inEmail = document.getElementById('inEmail');
-  var inPassword = document.getElementById('inPassword');
+  /* ============== login gate (cloud mode: login comes first) ============== */
+  var gateMode = 'login'; // 'login' | 'register'
+  function renderGate(main) {
+    main.textContent = '';
+    var card = el('div', 'gate-card');
+    card.appendChild(el('h3', null, L.t(gateMode === 'login' ? 'gateTitle' : 'registerBtn')));
+    card.appendChild(el('div', 'modal-sub', L.t('gateSub')));
 
-  function openLogin() {
-    inPassword.value = '';
-    loginOverlay.classList.remove('hidden');
-    inEmail.focus();
-  }
-  function closeLogin() { loginOverlay.classList.add('hidden'); }
+    var fE = el('div', 'field');
+    fE.appendChild(el('label', null, L.t('email')));
+    var iE = document.createElement('input');
+    iE.type = 'email'; iE.autocomplete = 'username';
+    fE.appendChild(iE);
+    card.appendChild(fE);
 
-  document.getElementById('btnCancelLogin').addEventListener('click', closeLogin);
-  document.getElementById('btnDoLogin').addEventListener('click', doLogin);
-  inPassword.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
+    var fP = el('div', 'field');
+    fP.appendChild(el('label', null, L.t('password')));
+    var iP = document.createElement('input');
+    iP.type = 'password';
+    iP.autocomplete = gateMode === 'login' ? 'current-password' : 'new-password';
+    fP.appendChild(iP);
+    card.appendChild(fP);
 
-  function doLogin() {
-    var email = inEmail.value.trim();
-    var pw = inPassword.value;
-    if (!email || !pw) { showToast(L.t('toastFill')); return; }
-    authFns.signInWithEmailAndPassword(auth, email, pw).then(function () {
-      closeLogin();
-      showToast(L.t('toastLoggedIn'));
-    }).catch(function (err) {
-      var code = err && err.code ? err.code : '';
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-        showToast(L.t('toastWrong'));
-      } else if (code === 'auth/too-many-requests') {
-        showToast(L.t('toastTooMany'));
-      } else {
-        showToast(L.t('toastLoginFail'));
-      }
+    function submit() {
+      var em = iE.value.trim(), pw = iP.value;
+      if (!em || !pw) { showToast(L.t('toastFill')); return; }
+      var p = gateMode === 'login'
+        ? authFns.signInWithEmailAndPassword(auth, em, pw)
+        : authFns.createUserWithEmailAndPassword(auth, em, pw);
+      p.then(function () {
+        showToast(L.t(gateMode === 'login' ? 'toastLoggedIn' : 'toastRegistered'));
+      }).catch(function (err) { showToast(authErrText(err)); });
+    }
+    var go = el('button', 'btn primary', L.t(gateMode === 'login' ? 'loginBtn' : 'registerBtn'));
+    go.type = 'button';
+    go.addEventListener('click', submit);
+    iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
+    card.appendChild(go);
+
+    var sw = el('button', 'btn ghost gate-switch', L.t(gateMode === 'login' ? 'gateRegisterQ' : 'gateLoginQ'));
+    sw.type = 'button';
+    sw.addEventListener('click', function () {
+      gateMode = gateMode === 'login' ? 'register' : 'login';
+      render();
     });
+    card.appendChild(sw);
+    main.appendChild(card);
+  }
+
+  function authErrText(err) {
+    var code = (err && err.code) || '';
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return L.t('toastWrong');
+    if (code === 'auth/email-already-in-use') return L.t('toastEmailInUse');
+    if (code === 'auth/weak-password') return L.t('toastWeakPw');
+    if (code === 'auth/too-many-requests') return L.t('toastTooMany');
+    return L.t('toastLoginFail');
   }
 
   /* ===================== shared UI ===================== */
-  [dayOverlay, personOverlay, loginOverlay].forEach(function (ov) {
+  [dayOverlay, personOverlay].forEach(function (ov) {
     ov.addEventListener('mousedown', function (ev) {
       if (ev.target === ov) {
         if (ov === dayOverlay) closeDayModal();
-        else if (ov === personOverlay) closePersonModal();
-        else closeLogin();
+        else closePersonModal();
       }
     });
   });
@@ -1270,7 +1348,6 @@
     if (ev.key === 'Escape') {
       if (!dayOverlay.classList.contains('hidden')) closeDayModal();
       if (!personOverlay.classList.contains('hidden')) closePersonModal();
-      if (!loginOverlay.classList.contains('hidden')) closeLogin();
     }
   });
 

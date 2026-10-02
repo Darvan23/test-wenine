@@ -31,11 +31,13 @@
     people: {},     // id -> {id,name,start,end}
     entries: {},    // "pid_date" -> entry (only the viewed month)
     view: null,     // {y,m}
+    user: null,
     admin: null,
     ready: false
   };
   var fb = null, fbDb = null, authFns = null, auth = null;
   var entriesUnsub = null;
+  var peopleUnsub = null;
   var editingDate = null;
   var editingPerson = null;
   var editStatus = 'worked';
@@ -79,23 +81,40 @@
       authFns = mods[2];
       auth = authFns.getAuth(app);
 
+      var now = new Date();
+      state.view = { y: now.getFullYear(), m: now.getMonth() };
+
       authFns.onAuthStateChanged(auth, function (user) {
-        state.admin = user || null;
+        state.user = user || null;
+        state.admin = null;
+        if (!user) {
+          if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
+          if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
+          state.people = {}; state.entries = {}; state.ready = false;
+          renderAdminArea();
+          render();
+          return;
+        }
+        fb.getDoc(fb.doc(fbDb, 'admins', (user.email || '').toLowerCase())).then(function (s) {
+          state.admin = s.exists() ? user : null;
+          if (state.admin) {
+            if (!peopleUnsub) {
+              peopleUnsub = fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
+                var m = {};
+                snap.forEach(function (d) { m[d.id] = d.data(); });
+                state.people = m;
+                state.ready = true;
+                render();
+              }, function () { showToast(L.t('toastStaff')); });
+            }
+            subscribeMonth();
+          }
+          renderAdminArea();
+          render();
+        }).catch(function () { renderAdminArea(); render(); });
         renderAdminArea();
         render();
       });
-
-      fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
-        var m = {};
-        snap.forEach(function (d) { m[d.id] = d.data(); });
-        state.people = m;
-        state.ready = true;
-        render();
-      }, function () { showToast(L.t('toastStaff')); });
-
-      var now = new Date();
-      state.view = { y: now.getFullYear(), m: now.getMonth() };
-      subscribeMonth();
       renderAdminArea();
       render();
     }).catch(function () {
@@ -107,6 +126,7 @@
 
   /* all entries of the viewed month, for every person */
   function subscribeMonth() {
+    if (!fb || !state.admin) return;
     if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
     var first = fmtDate(new Date(state.view.y, state.view.m, 1));
     var last = fmtDate(new Date(state.view.y, state.view.m + 1, 0));
@@ -140,19 +160,13 @@
   function renderAdminArea() {
     var area = document.getElementById('adminArea');
     area.textContent = '';
-    if (state.admin) {
-      area.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
-      var out = el('button', 'icon-btn', L.t('logout'));
-      out.type = 'button';
-      out.addEventListener('click', function () { authFns.signOut(auth); });
-      area.appendChild(out);
-    } else {
-      area.appendChild(el('span', 'admin-pill', L.t('viewOnly')));
-      var btn = el('button', 'icon-btn', L.t('adminLogin'));
-      btn.type = 'button';
-      btn.addEventListener('click', openLogin);
-      area.appendChild(btn);
-    }
+    if (!state.user) return;
+    if (state.admin) area.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
+    var out = el('button', 'icon-btn', L.t('logout'));
+    out.type = 'button';
+    out.title = state.user.email || '';
+    out.addEventListener('click', function () { authFns.signOut(auth); });
+    area.appendChild(out);
   }
 
   function render() {
@@ -162,15 +176,9 @@
       main.appendChild(el('div', 'notice', L.t('connecting')));
       return;
     }
+    if (!state.user) { renderGate(main); return; }
     if (!state.admin) {
-      var n = el('div', 'notice');
-      n.appendChild(el('div', null, L.t('adminNeedLogin')));
-      var b = el('button', 'btn primary', L.t('adminLogin'));
-      b.type = 'button';
-      b.style.marginTop = '16px';
-      b.addEventListener('click', openLogin);
-      n.appendChild(b);
-      main.appendChild(n);
+      main.appendChild(el('div', 'notice', L.t('loginSubAdmin')));
       return;
     }
     main.appendChild(renderMonthbar());
@@ -419,52 +427,64 @@
     }).catch(function () { showToast(L.t('toastClearFail')); });
   });
 
-  /* ===================== login ===================== */
-  var loginOverlay = document.getElementById('loginOverlay');
-  var inEmail = document.getElementById('inEmail');
-  var inPassword = document.getElementById('inPassword');
-
-  function openLogin() {
-    inPassword.value = '';
-    loginOverlay.classList.remove('hidden');
-    inEmail.focus();
-  }
-  function closeLogin() { loginOverlay.classList.add('hidden'); }
-
-  document.getElementById('btnCancelLogin').addEventListener('click', closeLogin);
-  document.getElementById('btnDoLogin').addEventListener('click', doLogin);
-  inPassword.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
-
-  function doLogin() {
-    var email = inEmail.value.trim();
-    var pw = inPassword.value;
-    if (!email || !pw) { showToast(L.t('toastFill')); return; }
-    authFns.signInWithEmailAndPassword(auth, email, pw).then(function () {
-      closeLogin();
-      showToast(L.t('toastLoggedIn'));
-    }).catch(function (err) {
-      var code = err && err.code ? err.code : '';
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-        showToast(L.t('toastWrong'));
-      } else if (code === 'auth/too-many-requests') {
-        showToast(L.t('toastTooMany'));
-      } else {
-        showToast(L.t('toastLoginFail'));
-      }
+  /* ============== login gate (login comes first) ============== */
+  var gateMode = 'login';
+  function renderGate(main) {
+    var card = el('div', 'gate-card');
+    card.appendChild(el('h3', null, L.t(gateMode === 'login' ? 'gateTitle' : 'registerBtn')));
+    card.appendChild(el('div', 'modal-sub', L.t('gateSub')));
+    var fE = el('div', 'field');
+    fE.appendChild(el('label', null, L.t('email')));
+    var iE = document.createElement('input');
+    iE.type = 'email'; iE.autocomplete = 'username';
+    fE.appendChild(iE);
+    card.appendChild(fE);
+    var fP = el('div', 'field');
+    fP.appendChild(el('label', null, L.t('password')));
+    var iP = document.createElement('input');
+    iP.type = 'password';
+    iP.autocomplete = gateMode === 'login' ? 'current-password' : 'new-password';
+    fP.appendChild(iP);
+    card.appendChild(fP);
+    function submit() {
+      var em = iE.value.trim(), pw = iP.value;
+      if (!em || !pw) { showToast(L.t('toastFill')); return; }
+      var pr = gateMode === 'login'
+        ? authFns.signInWithEmailAndPassword(auth, em, pw)
+        : authFns.createUserWithEmailAndPassword(auth, em, pw);
+      pr.then(function () {
+        showToast(L.t(gateMode === 'login' ? 'toastLoggedIn' : 'toastRegistered'));
+      }).catch(function (err) { showToast(authErrText(err)); });
+    }
+    var go = el('button', 'btn primary', L.t(gateMode === 'login' ? 'loginBtn' : 'registerBtn'));
+    go.type = 'button';
+    go.addEventListener('click', submit);
+    iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
+    card.appendChild(go);
+    var sw = el('button', 'btn ghost gate-switch', L.t(gateMode === 'login' ? 'gateRegisterQ' : 'gateLoginQ'));
+    sw.type = 'button';
+    sw.addEventListener('click', function () {
+      gateMode = gateMode === 'login' ? 'register' : 'login';
+      render();
     });
+    card.appendChild(sw);
+    main.appendChild(card);
+  }
+  function authErrText(err) {
+    var code = (err && err.code) || '';
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return L.t('toastWrong');
+    if (code === 'auth/email-already-in-use') return L.t('toastEmailInUse');
+    if (code === 'auth/weak-password') return L.t('toastWeakPw');
+    if (code === 'auth/too-many-requests') return L.t('toastTooMany');
+    return L.t('toastLoginFail');
   }
 
   /* ===================== shared UI ===================== */
-  [dayOverlay, loginOverlay].forEach(function (ov) {
-    ov.addEventListener('mousedown', function (ev) {
-      if (ev.target === ov) { if (ov === dayOverlay) closeEditor(); else closeLogin(); }
-    });
+  dayOverlay.addEventListener('mousedown', function (ev) {
+    if (ev.target === dayOverlay) closeEditor();
   });
   document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape') {
-      if (!dayOverlay.classList.contains('hidden')) closeEditor();
-      if (!loginOverlay.classList.contains('hidden')) closeLogin();
-    }
+    if (ev.key === 'Escape' && !dayOverlay.classList.contains('hidden')) closeEditor();
   });
 
   var toastTimer = null;

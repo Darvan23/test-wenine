@@ -1053,3 +1053,40 @@ button.cell:hover {
 @media (max-width: 900px){
   .plan-wrap{ grid-template-columns:1fr; }
 }
+
+/* ============================================================
+   Login gate + requests
+   ============================================================ */
+.gate-card{
+  max-width:400px; margin:60px auto 0; background:var(--surface);
+  border:1px solid var(--line); border-radius:16px; padding:26px 26px 22px;
+  box-shadow:var(--shadow); display:flex; flex-direction:column;
+}
+.gate-card h3{
+  font-family:'Young Serif',Georgia,serif; font-weight:400; font-size:22px; margin:0 0 2px;
+}
+.gate-card .field input{
+  width:100%; border:1px solid var(--line-strong); border-radius:10px;
+  background:var(--bg); padding:9px 12px;
+}
+.gate-card .btn.primary{ width:100%; margin-top:4px; }
+.gate-switch{ margin-top:10px; font-size:13px; align-self:center; }
+
+.req-box{ margin-top:18px; }
+.req-form{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; }
+.req-form .field{ margin-bottom:0; }
+.req-form input, .req-form select{
+  border:1px solid var(--line-strong); border-radius:10px; background:var(--bg); padding:8px 10px;
+}
+.req-row{
+  display:flex; gap:12px; align-items:center; padding:9px 0;
+  border-bottom:1px solid var(--line); flex-wrap:wrap; font-size:13px;
+}
+.req-row:last-child{ border-bottom:none; }
+.req-row .rdate{ font-weight:700; font-variant-numeric:tabular-nums; }
+.req-row .rtype{ font-weight:600; }
+.req-row .rnote{ color:var(--muted); flex:1; min-width:120px; }
+.badge-st{ font-size:11px; font-weight:700; border-radius:999px; padding:2px 10px; letter-spacing:.04em; }
+.badge-st.pending{ background:var(--gold-soft); color:var(--gold); }
+.badge-st.approved{ background:var(--green-soft); color:var(--green); }
+.badge-st.rejected{ background:var(--accent-soft); color:var(--danger); }
