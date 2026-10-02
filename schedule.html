@@ -1,0 +1,63 @@
+<!-- ============================================================
+     Wenine Schedule — one shared calendar showing who works when.
+     Everyone can view it; only a logged-in admin can change it.
+     Styling:  css/stylesheet.css      Behavior: schedule.js
+     ============================================================ -->
+<title>Wenine Schedule</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/stylesheet.css">
+
+<div class="wrap">
+  <header class="top">
+    <h1 class="wordmark">Wenine <small>schedule</small></h1>
+    <nav class="page-nav">
+      <a href="index.html">Hour tracker</a>
+      <a href="schedule.html" class="current">Schedule</a>
+    </nav>
+    <div class="admin-area" id="adminArea"></div>
+  </header>
+
+  <!-- month navigation + the shared calendar are rendered here by schedule.js -->
+  <div id="mainArea"></div>
+</div>
+
+<!-- ============== day editor (admins only) ================= -->
+<div class="overlay hidden" id="dayOverlay" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
+  <div class="modal">
+    <h3 id="dayTitle"></h3>
+    <div class="modal-sub">Set each person to working or free. Leave on “—” to keep them off this day.</div>
+    <div id="rowsArea"></div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btnCancelDay" type="button">Cancel</button>
+      <button class="btn primary" id="btnSaveDay" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================== admin login pop-up ==================== -->
+<div class="overlay hidden" id="loginOverlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+  <div class="modal">
+    <h3 id="loginTitle">Admin login</h3>
+    <div class="modal-sub">Only admins can change the schedule. Everyone can view it.</div>
+    <div class="field">
+      <label for="inEmail">Email</label>
+      <input type="email" id="inEmail" autocomplete="username" placeholder="admin@wenine.app">
+    </div>
+    <div class="field">
+      <label for="inPassword">Password</label>
+      <input type="password" id="inPassword" autocomplete="current-password">
+    </div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btnCancelLogin" type="button">Cancel</button>
+      <button class="btn primary" id="btnDoLogin" type="button">Log in</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="schedule.js"></script>
