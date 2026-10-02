@@ -139,6 +139,17 @@
     setStorageNote('storageClaude');
   }
 
+  /* every account that logs in or registers is recorded once, so the
+     admin can pick registered emails from a list when linking people */
+  function recordAccount(user) {
+    if (!user || !user.email) return;
+    var em = user.email.toLowerCase();
+    var ref = fb.doc(fbDb, 'accounts', em);
+    fb.getDoc(ref).then(function (s) {
+      if (!s.exists()) return fb.setDoc(ref, { email: em });
+    }).catch(function () { });
+  }
+
   /* Firebase: loads Google's Firestore library over the internet, then
      connects to the WenineHourTracker project. Data saved here is
      permanent, shared, and syncs live to everyone with the page open. */
@@ -170,6 +181,7 @@
           render();
           return;
         }
+        recordAccount(user);
         fb.getDoc(fb.doc(fbDb, 'admins', (user.email || '').toLowerCase())).then(function (s) {
           state.admin = s.exists() ? user : null;
           ensureSelection();
@@ -1225,6 +1237,20 @@
     del.classList.toggle('hidden', !p);
     del.textContent = L.t('removePerson');
     deleteArmed = false;
+
+    /* offer registered account emails as suggestions in the email field */
+    var dl = document.getElementById('accountsList');
+    dl.textContent = '';
+    if (state.mode === 'firebase' && fbDb) {
+      fb.getDocs(fb.collection(fbDb, 'accounts')).then(function (snap) {
+        snap.forEach(function (d) {
+          var o = document.createElement('option');
+          o.value = (d.data() && d.data().email) || d.id;
+          dl.appendChild(o);
+        });
+      }).catch(function () { });
+    }
+
     personOverlay.classList.remove('hidden');
     inName.focus();
   }

@@ -99,6 +99,7 @@
           render();
           return;
         }
+        recordAccount(user);
         fb.getDoc(fb.doc(fbDb, 'admins', (user.email || '').toLowerCase())).then(function (s) {
           state.admin = s.exists() ? user : null;
           renderAdminArea();
@@ -135,6 +136,16 @@
       n.textContent = L.t('offlineNotice');
       main.appendChild(n);
     });
+  }
+
+  /* record this account's email once, for the admin's link-picker */
+  function recordAccount(user) {
+    if (!user || !user.email) return;
+    var em = user.email.toLowerCase();
+    var ref = fb.doc(fbDb, 'accounts', em);
+    fb.getDoc(ref).then(function (s) {
+      if (!s.exists()) return fb.setDoc(ref, { email: em });
+    }).catch(function () { });
   }
 
   /* listen to this month's schedule; called again on month change */
