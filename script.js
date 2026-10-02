@@ -38,7 +38,8 @@
     entries: {},         // "pid_date" -> {personId,date,status,from,to,hours,note}
     personId: null,
     view: null,          // {y,m}
-    viewMode: 'cal',     // 'cal' (calendar) | 'list' (compact table like the paper sheet)
+    viewMode: 'cal',     // 'cal' (calendar) | 'list' (sheet) | 'plan' (planner)
+    plan: null,          // current person's planner settings
     loaded: false,
     admin: null,         // logged-in admin user (cloud mode only)
     mode: null           // 'db' (claude.ai) | 'firebase' | 'local'
@@ -50,6 +51,8 @@
   var authFns = null;    // Firebase Auth module (its functions)
   var auth = null;       // Firebase Auth handle
   var entriesUnsub = null;
+  var plannerUnsub = null;
+  var localPlanner = {};   // planner settings per person (localStorage mode)
   var editingDate = null;
   var editingPersonId = null; // null = adding
   var editStatus = 'worked';
@@ -118,7 +121,8 @@
       savePerson: function (p) { return db.doc('people/' + p.id).set(p); },
       deletePerson: function (id) { return db.doc('people/' + id).delete(); },
       saveEntry: function (e) { return db.doc('entries/' + e.personId + '_' + e.date).set(e); },
-      deleteEntry: function (key) { return db.doc('entries/' + key).delete(); }
+      deleteEntry: function (key) { return db.doc('entries/' + key).delete(); },
+      savePlanner: function (p) { return db.doc('planner/' + p.personId).set(p); }
     };
     db.collection('people').onSnapshot(function (snap) {
       var m = {};
@@ -157,7 +161,8 @@
         savePerson: function (p) { return fb.setDoc(fb.doc(fbDb, 'people', p.id), p); },
         deletePerson: function (id) { return fb.deleteDoc(fb.doc(fbDb, 'people', id)); },
         saveEntry: function (e) { return fb.setDoc(fb.doc(fbDb, 'entries', e.personId + '_' + e.date), e); },
-        deleteEntry: function (key) { return fb.deleteDoc(fb.doc(fbDb, 'entries', key)); }
+        deleteEntry: function (key) { return fb.deleteDoc(fb.doc(fbDb, 'entries', key)); },
+        savePlanner: function (p) { return fb.setDoc(fb.doc(fbDb, 'planner', p.personId), p); }
       };
       fb.onSnapshot(fb.collection(fbDb, 'people'), function (snap) {
         var m = {};
@@ -192,6 +197,7 @@
     try { data = JSON.parse(localStorage.getItem(LS_DATA) || '{}'); } catch (e) { data = {}; }
     state.people = data.people || {};
     state.entries = data.entries || {};
+    localPlanner = data.planner || {};
     if (Object.keys(state.people).length === 0) {
       state.people.darvan = { id: 'darvan', name: 'Darvan', start: DEFAULT_START, end: DEFAULT_END };
       persistLocal();
@@ -206,7 +212,8 @@
         persistLocal(); return Promise.resolve();
       },
       saveEntry: function (e) { state.entries[e.personId + '_' + e.date] = e; persistLocal(); return Promise.resolve(); },
-      deleteEntry: function (key) { delete state.entries[key]; persistLocal(); return Promise.resolve(); }
+      deleteEntry: function (key) { delete state.entries[key]; persistLocal(); return Promise.resolve(); },
+      savePlanner: function (p) { localPlanner[p.personId] = p; state.plan = p; persistLocal(); return Promise.resolve(); }
     };
     state.loaded = true;
     ensureSelection();
@@ -216,13 +223,33 @@
 
   function persistLocal() {
     try {
-      localStorage.setItem(LS_DATA, JSON.stringify({ people: state.people, entries: state.entries }));
+      localStorage.setItem(LS_DATA, JSON.stringify({ people: state.people, entries: state.entries, planner: localPlanner }));
     } catch (e) { showToast(L.t('toastStorageFull')); }
   }
 
   /* Listen to one person's logged days. Re-subscribes when you switch
      person; localStorage mode keeps everything in memory instead. */
+  /* the person's planner settings live in their own small document */
+  function subscribePlanner(pid) {
+    if (plannerUnsub) { plannerUnsub(); plannerUnsub = null; }
+    state.plan = null;
+    if (state.mode === 'db' && dbRef) {
+      plannerUnsub = dbRef.doc('planner/' + pid).onSnapshot(function (snap) {
+        state.plan = snap.exists ? snap.data() : null;
+        render();
+      }, function () { });
+    } else if (state.mode === 'firebase' && fbDb) {
+      plannerUnsub = fb.onSnapshot(fb.doc(fbDb, 'planner', pid), function (snap) {
+        state.plan = snap.exists() ? snap.data() : null;
+        render();
+      }, function () { });
+    } else if (state.mode === 'local') {
+      state.plan = localPlanner[pid] || null;
+    }
+  }
+
   function subscribeEntries(pid) {
+    subscribePlanner(pid);
     if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
     if (state.mode === 'db' && dbRef) {
       state.entries = {};
@@ -435,6 +462,12 @@
       return;
     }
 
+    if (state.viewMode === 'plan') {
+      main.appendChild(renderPlanBar());
+      main.appendChild(renderPlanner(person));
+      return;
+    }
+
     if (!state.view) state.view = clampView(person);
     main.appendChild(renderMonthbar(person));
     main.appendChild(renderCalendar(person));
@@ -493,7 +526,7 @@
   /* the calendar / list switch */
   function modeSeg() {
     var seg = el('div', 'mode-seg');
-    [['cal', 'viewCal'], ['list', 'viewList']].forEach(function (m) {
+    [['cal', 'viewCal'], ['list', 'viewList'], ['plan', 'viewPlan']].forEach(function (m) {
       var b = el('button', state.viewMode === m[0] ? 'on' : '', L.t(m[1]));
       b.type = 'button';
       b.addEventListener('click', function () {
@@ -828,6 +861,199 @@
     return cell;
   }
 
+  /* ============ planner: can I reach my hours in time? ============ */
+  function planCfg(person) {
+    var p = (state.plan && state.plan.personId === person.id) ? state.plan : null;
+    return {
+      personId: person.id,
+      target: p && +p.target > 0 ? +p.target : 1000,
+      days: p && p.days && p.days.length ? p.days.slice() : [1, 2, 3, 4],  // Tue–Fri
+      hoursPerDay: p && +p.hoursPerDay > 0 ? +p.hoursPerDay : 8
+    };
+  }
+
+  /* Walk every day from tomorrow to the deadline. A day counts when it is
+     one of the chosen weekdays, not a Monday (closed), and not already
+     filled in. Weekend days contribute double, same as everywhere else. */
+  function planCalc(person, cfg) {
+    var t = totalsFor(person.id);
+    var remaining = Math.max(0, cfg.target - t.counted);
+    var end = parseDate(person.end);
+    var capacity = 0, cum = 0, finish = null;
+    var monthly = {};
+    var d = addDays(new Date(), 1);
+    while (d <= end) {
+      var wd = dowMon(d);
+      var ds = fmtDate(d);
+      if (wd !== 0 && cfg.days.indexOf(wd) !== -1 && !entryFor(person.id, ds)) {
+        var add = cfg.hoursPerDay * (isWeekend(d) ? 2 : 1);
+        capacity += add;
+        monthly[d.getFullYear() + '-' + d.getMonth()] = (monthly[d.getFullYear() + '-' + d.getMonth()] || 0) + add;
+        if (!finish && remaining > 0) {
+          cum += add;
+          if (cum >= remaining) finish = ds;
+        }
+      }
+      d = addDays(d, 1);
+    }
+    var weekly = 0;
+    cfg.days.forEach(function (w) { weekly += cfg.hoursPerDay * (w >= 5 ? 2 : 1); });
+    var daysLeft = Math.max(1, Math.round((end - new Date()) / 864e5));
+    var needWeekly = remaining / Math.max(daysLeft / 7, 0.01);
+    return {
+      counted: t.counted, target: cfg.target, remaining: remaining,
+      capacity: capacity, finish: finish, weekly: weekly,
+      needWeekly: needWeekly, monthly: monthly
+    };
+  }
+
+  function renderPlanBar() {
+    var bar = el('div', 'monthbar');
+    bar.appendChild(modeSeg());
+    bar.appendChild(el('h2', null, L.t('viewPlan')));
+    return bar;
+  }
+
+  function renderPlanner(person) {
+    var cfg = planCfg(person);
+    var res = planCalc(person, cfg);
+    var wrap = el('div', 'plan-wrap');
+
+    function saveCfg() {
+      cfg.days.sort();
+      var p = { personId: person.id, target: cfg.target, days: cfg.days, hoursPerDay: cfg.hoursPerDay };
+      state.plan = p;
+      store.savePlanner(p).catch(function () { showToast(L.t('toastSaveFail')); });
+      render();
+    }
+
+    /* ---------- settings card ---------- */
+    var set = el('div', 'plan-card');
+    set.appendChild(el('h3', null, L.t('planSettings')));
+
+    function numField(labelKey, value, step, onChange) {
+      var f = el('div', 'field');
+      f.appendChild(el('label', null, L.t(labelKey)));
+      var i = document.createElement('input');
+      i.type = 'number'; i.step = step; i.min = step; i.value = value;
+      i.addEventListener('change', function () { onChange(+i.value); });
+      f.appendChild(i);
+      return f;
+    }
+    set.appendChild(numField('planTarget', cfg.target, '1', function (v) {
+      cfg.target = Math.max(1, v || 1); saveCfg();
+    }));
+
+    var df = el('div', 'field');
+    df.appendChild(el('label', null, L.t('planDays')));
+    var chips = el('div', 'day-chips');
+    for (var wd = 1; wd <= 6; wd++) {
+      (function (wd) {
+        var on = cfg.days.indexOf(wd) !== -1;
+        var c = el('button', 'day-chip' + (wd >= 5 ? ' wkd' : '') + (on ? ' on' : ''), DAY_SHORT[wd]);
+        c.type = 'button';
+        c.addEventListener('click', function () {
+          var i = cfg.days.indexOf(wd);
+          if (i === -1) cfg.days.push(wd); else cfg.days.splice(i, 1);
+          saveCfg();
+        });
+        chips.appendChild(c);
+      })(wd);
+    }
+    df.appendChild(chips);
+    set.appendChild(df);
+
+    set.appendChild(numField('planPerDay', cfg.hoursPerDay, '0.5', function (v) {
+      cfg.hoursPerDay = Math.max(0.5, Math.min(24, v || 8)); saveCfg();
+    }));
+
+    var dl = el('div', 'field');
+    dl.appendChild(el('label', null, L.t('planDeadline')));
+    dl.appendChild(el('div', 'plan-deadline', shortDate(person.end)));
+    dl.appendChild(el('div', 'hint', L.t('planDeadlineNote')));
+    set.appendChild(dl);
+    set.appendChild(el('div', 'plan-note', L.t('planHint')));
+    wrap.appendChild(set);
+
+    /* ---------- result card ---------- */
+    var out = el('div', 'plan-card');
+    var verdict;
+    if (res.remaining === 0) {
+      verdict = el('div', 'verdict ok', L.t('planVerdictDone', { t: fmtH(res.target) }));
+    } else if (res.finish) {
+      verdict = el('div', 'verdict ok', L.t('planVerdictOk', {
+        t: fmtH(res.target), d: shortDate(res.finish),
+        s: fmtH(res.capacity - res.remaining), e: shortDate(person.end)
+      }));
+    } else {
+      verdict = el('div', 'verdict bad', L.t('planVerdictShort', {
+        e: shortDate(person.end), x: fmtH(res.counted + res.capacity),
+        t: fmtH(res.target), y: fmtH(res.remaining - res.capacity)
+      }));
+    }
+    out.appendChild(verdict);
+
+    var pct = Math.min(100, res.target ? res.counted / res.target * 100 : 0);
+    var pl = el('div', 'plan-progress-label');
+    pl.appendChild(el('strong', null, fmtH(res.counted) + ' / ' + fmtH(res.target) + ' ' + L.t('hourUnit')));
+    pl.appendChild(document.createTextNode(' · ' + Math.round(pct) + '%'));
+    out.appendChild(pl);
+    var pr = el('div', 'progress');
+    var fill = el('div', 'fill', '');
+    fill.style.width = pct + '%';
+    pr.appendChild(fill);
+    out.appendChild(pr);
+
+    var stats = el('div', 'plan-stats');
+    function ps(labelKey, val) {
+      var s = el('div', 'ps');
+      s.appendChild(el('div', 'l', L.t(labelKey)));
+      s.appendChild(el('div', 'v', val));
+      stats.appendChild(s);
+    }
+    ps('planRemaining', fmtH(res.remaining) + ' ' + L.t('hourUnit'));
+    ps('planWeekly', fmtH(res.weekly) + ' ' + L.t('hourUnit'));
+    ps('planNeedWeekly', fmtH(Math.max(0, res.needWeekly)) + ' ' + L.t('hourUnit'));
+    ps('planFinish', res.remaining === 0 ? '✓' : (res.finish ? shortDate(res.finish) : '—'));
+    out.appendChild(stats);
+    wrap.appendChild(out);
+
+    /* ---------- month-by-month projection ---------- */
+    var mt = el('div', 'plan-card plan-months');
+    mt.appendChild(el('h3', null, L.t('planSchedule')));
+    var tbl = el('table', 'mtab');
+    var th = el('thead');
+    var hr2 = el('tr');
+    [L.t('planMonth'), L.t('planPlanned'), L.t('planCum')].forEach(function (h) {
+      hr2.appendChild(el('th', null, h));
+    });
+    th.appendChild(hr2);
+    tbl.appendChild(th);
+    var tb = el('tbody');
+    var now = new Date();
+    var mi = monthIndex(now.getFullYear(), now.getMonth());
+    var endD = parseDate(person.end);
+    var me = monthIndex(endD.getFullYear(), endD.getMonth());
+    var cum = res.counted;
+    var hit = res.counted >= res.target;
+    for (var i = mi; i <= me; i++) {
+      var yy = Math.floor(i / 12), mm = ((i % 12) + 12) % 12;
+      var add = res.monthly[yy + '-' + mm] || 0;
+      cum += add;
+      var tr = el('tr');
+      tr.appendChild(el('td', null, MONTHS[mm] + ' ' + yy));
+      tr.appendChild(el('td', null, add ? '+' + fmtH(add) + ' ' + L.t('hourUnit') : '—'));
+      tr.appendChild(el('td', 'u-worked', fmtH(cum) + ' ' + L.t('hourUnit')));
+      if (!hit && cum >= res.target) { tr.classList.add('hitrow'); hit = true; }
+      tb.appendChild(tr);
+    }
+    tbl.appendChild(tb);
+    mt.appendChild(tbl);
+    wrap.appendChild(mt);
+
+    return wrap;
+  }
+
   /* ===================== day modal ===================== */
   var dayOverlay = document.getElementById('dayOverlay');
   var inFrom = document.getElementById('inFrom');
@@ -1074,7 +1300,7 @@
   /* ===================== boot ===================== */
   try {
     var ui0 = JSON.parse(localStorage.getItem(LS_UI) || '{}');
-    if (ui0.viewMode === 'list') state.viewMode = 'list';
+    if (ui0.viewMode === 'list' || ui0.viewMode === 'plan') state.viewMode = ui0.viewMode;
   } catch (e) { }
   L.applyStatic();
   render();

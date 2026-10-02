@@ -1005,3 +1005,51 @@ button.cell:hover {
   .monthbar .mode-seg{ order:5; flex-basis:100%; width:max-content; }
   .monthbar .legend{ order:6; }
 }
+
+/* ============================================================
+   Planner — "do I reach my hours in time?"
+   ============================================================ */
+.plan-wrap{
+  display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start;
+}
+.plan-card{
+  border:1px solid var(--line); border-radius:14px; background:var(--surface); padding:18px 20px;
+}
+.plan-card h3{
+  font-family:'Young Serif',Georgia,serif; font-weight:400; font-size:17px; margin:0 0 14px;
+}
+.plan-months{ grid-column:1 / -1; }
+.plan-deadline{ font-weight:700; font-variant-numeric:tabular-nums; }
+.plan-note{ font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.45; }
+
+.day-chips{ display:flex; gap:6px; flex-wrap:wrap; }
+.day-chip{
+  border:1px solid var(--line-strong); background:var(--surface); border-radius:8px;
+  padding:6px 11px; font-weight:600; font-size:13px; color:var(--muted); text-transform:uppercase;
+}
+.day-chip.on{ background:var(--green-soft); border-color:var(--green); color:var(--green); }
+.day-chip.wkd.on{ background:var(--gold-soft); border-color:var(--gold); color:var(--gold); }
+
+.verdict{
+  font-size:14.5px; font-weight:600; line-height:1.5; padding:12px 15px;
+  border-radius:10px; margin-bottom:14px;
+}
+.verdict.ok{ background:var(--green-soft); color:var(--green); }
+.verdict.bad{ background:var(--accent-soft); color:var(--danger); }
+
+.plan-progress-label{ font-size:13px; color:var(--muted); margin-bottom:5px; font-variant-numeric:tabular-nums; }
+.plan-progress-label strong{ color:var(--ink); font-size:15px; }
+.progress{ height:10px; border-radius:999px; background:var(--surface-2); overflow:hidden; margin-bottom:16px; }
+.progress .fill{ height:100%; background:var(--green); border-radius:999px; }
+
+.plan-stats{ display:grid; grid-template-columns:1fr 1fr; gap:12px 18px; }
+.plan-stats .l{
+  font-size:10.5px; font-weight:600; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:2px;
+}
+.plan-stats .v{ font-weight:700; font-size:18px; font-variant-numeric:tabular-nums; }
+.mtab .hitrow td{ background:var(--green-soft); }
+
+@media (max-width: 900px){
+  .plan-wrap{ grid-template-columns:1fr; }
+}
