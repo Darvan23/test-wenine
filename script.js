@@ -38,6 +38,7 @@
     entries: {},         // "pid_date" -> {personId,date,status,from,to,hours,note}
     personId: null,
     view: null,          // {y,m}
+    viewMode: 'cal',     // 'cal' (calendar) | 'list' (compact table like the paper sheet)
     loaded: false,
     admin: null,         // logged-in admin user (cloud mode only)
     mode: null           // 'db' (claude.ai) | 'firebase' | 'local'
@@ -259,7 +260,7 @@
     if (state.personId === id) return;
     state.personId = id;
     state.view = null;
-    try { localStorage.setItem(LS_UI, JSON.stringify({ personId: id })); } catch (e) { }
+    saveUI();
     subscribeEntries(id);
     render();
   }
@@ -267,6 +268,12 @@
   /* people management: open in claude/local modes, admin-only in cloud mode */
   function canManagePeople() {
     return state.mode !== 'firebase' || !!state.admin;
+  }
+
+  function saveUI() {
+    try {
+      localStorage.setItem(LS_UI, JSON.stringify({ personId: state.personId, viewMode: state.viewMode }));
+    } catch (e) { }
   }
 
   /* ===================== computations ===================== */
@@ -332,10 +339,26 @@
     document.getElementById('storageNote').textContent = key ? L.t(key) : '';
   }
 
+  /* While someone is typing in the list view, incoming data updates are
+     held back — rebuilding the page would steal their cursor. The held
+     update runs as soon as the focus leaves the list. */
+  var pendingRender = false;
+  function isEditingList() {
+    var a = document.activeElement;
+    return !!(a && a.closest && a.closest('.listgrid'));
+  }
   function render() {
+    if (isEditingList()) { pendingRender = true; return; }
+    pendingRender = false;
     renderPeople();
     renderMain();
   }
+  document.addEventListener('focusout', function () {
+    if (!pendingRender) return;
+    setTimeout(function () {
+      if (pendingRender && !isEditingList()) render();
+    }, 150);
+  });
 
   function renderPeople() {
     var row = document.getElementById('peopleRow');
@@ -404,9 +427,15 @@
     }
 
     var person = state.people[state.personId];
-    if (!state.view) state.view = clampView(person);
-
     main.appendChild(renderSummary(person));
+
+    if (state.viewMode === 'list') {
+      main.appendChild(renderListBar(person));
+      main.appendChild(renderListView(person));
+      return;
+    }
+
+    if (!state.view) state.view = clampView(person);
     main.appendChild(renderMonthbar(person));
     main.appendChild(renderCalendar(person));
   }
@@ -456,6 +485,29 @@
     bar.appendChild(el('h2', null, MONTHS[state.view.m] + ' ' + state.view.y));
     bar.appendChild(next);
 
+    bar.appendChild(modeSeg());
+    bar.appendChild(buildLegend());
+    return bar;
+  }
+
+  /* the calendar / list switch */
+  function modeSeg() {
+    var seg = el('div', 'mode-seg');
+    [['cal', 'viewCal'], ['list', 'viewList']].forEach(function (m) {
+      var b = el('button', state.viewMode === m[0] ? 'on' : '', L.t(m[1]));
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        if (state.viewMode === m[0]) return;
+        state.viewMode = m[0];
+        saveUI();
+        render();
+      });
+      seg.appendChild(b);
+    });
+    return seg;
+  }
+
+  function buildLegend() {
     var legend = el('div', 'legend');
     function key(cls, txt) {
       var k = el('span', 'key');
@@ -466,10 +518,220 @@
     legend.appendChild(key('worked', L.t('legWorked')));
     legend.appendChild(key('free', L.t('legFree')));
     legend.appendChild(key('x2', L.t('legX2')));
-    var mono = el('span', 'key', L.t('legMondays'));
-    legend.appendChild(mono);
-    bar.appendChild(legend);
+    legend.appendChild(el('span', 'key', L.t('legMondays')));
+    legend.appendChild(el('span', 'key', '✓ ' + L.t('confirmed')));
+    return legend;
+  }
+
+  /* ============ compact list view (like the paper stage sheet) ============ */
+  function renderListBar(person) {
+    var bar = el('div', 'monthbar');
+    bar.appendChild(modeSeg());
+    bar.appendChild(el('h2', null, shortDate(person.start) + ' – ' + shortDate(person.end)));
+    bar.appendChild(buildLegend());
     return bar;
+  }
+
+  function renderListView(person) {
+    var wrap = el('div', 'listgrid');
+    var s = parseDate(person.start), e = parseDate(person.end);
+    var si = monthIndex(s.getFullYear(), s.getMonth());
+    var ei = monthIndex(e.getFullYear(), e.getMonth());
+    var tStr = todayStr();
+    for (var i = si; i <= ei; i++) {
+      wrap.appendChild(renderMonthCard(person, Math.floor(i / 12), ((i % 12) + 12) % 12, tStr));
+    }
+    return wrap;
+  }
+
+  /* one month as a small, DIRECTLY EDITABLE table, like the paper sheet:
+     Datum | Dag | Uren | Van | Tot | ×2 | Opmerkingen.
+     Type straight into the cells — each row saves itself when you leave a
+     field. In the Uren column a number means worked; a word (vrij, ziek,
+     vak.) means free; emptying the whole row clears the day.
+     Mondays are left out entirely — Wenine is closed, same as the sheet. */
+  function renderMonthCard(person, y, m, tStr) {
+    var card = el('div', 'mcard');
+    card.appendChild(el('h3', null, MONTHS[m] + ' ' + y));
+    var table = el('table', 'mtab');
+
+    var thead = el('thead');
+    var hr = el('tr');
+    [L.t('colDate'), L.t('colDay'), L.t('hours'), L.t('from'), L.t('to'), L.t('colExtra'), L.t('note')]
+      .forEach(function (h) { hr.appendChild(el('th', null, h)); });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    var tfootBase = null, tfootCounted = null;
+
+    function refreshFoot() {
+      var base = 0, counted = 0;
+      var lastD = new Date(y, m + 1, 0).getDate();
+      for (var dd = 1; dd <= lastD; dd++) {
+        var dx = new Date(y, m, dd);
+        var dsx = fmtDate(dx);
+        if (dsx < person.start || dsx > person.end || isMonday(dx)) continue;
+        var ex = entryFor(person.id, dsx);
+        base += rawHours(ex);
+        counted += countedHours(ex, dx);
+      }
+      tfootBase.textContent = fmtH(base) + L.t('hourUnit');
+      tfootCounted.textContent = counted !== base ? '×2 → ' + fmtH(counted) + L.t('hourUnit') : '';
+    }
+
+    var lastDay = new Date(y, m + 1, 0).getDate();
+    for (var day = 1; day <= lastDay; day++) {
+      (function (day) {
+        var d = new Date(y, m, day);
+        var ds = fmtDate(d);
+        if (ds < person.start || ds > person.end) return;
+        if (isMonday(d)) return;
+        var weekend = isWeekend(d);
+        var entry = entryFor(person.id, ds);
+
+        var tr = el('tr');
+        if (ds === tStr) tr.classList.add('today-row');
+        var dateTd = el('td', 'c-date', pad(day) + '-' + pad(m + 1));
+        if (entry && entry.confirmed) {
+          var bc = el('span', 'b-conf', ' ✓');
+          bc.title = L.t('confirmedLock');
+          dateTd.appendChild(bc);
+        } else if (entry && entry.editedByAdmin) {
+          var ba = el('span', 'b-admin', ' ✎');
+          ba.title = L.t('byAdmin');
+          dateTd.appendChild(ba);
+        }
+        tr.appendChild(dateTd);
+        tr.appendChild(el('td', weekend ? 'wkd' : null, DAY_SHORT[dowMon(d)]));
+
+        var uTd = el('td', 'e');
+        var uIn = document.createElement('input');
+        uIn.type = 'text';
+        uIn.className = 'cin cin-uren';
+        uIn.setAttribute('aria-label', L.t('hours') + ' ' + ds);
+        if (entry && entry.status === 'worked') { uIn.value = fmtH(+entry.hours || 0); uTd.classList.add('u-worked'); }
+        else if (entry && entry.status === 'free') { uIn.value = entry.label || L.t('free'); uTd.classList.add('u-free'); }
+        uTd.appendChild(uIn);
+        tr.appendChild(uTd);
+
+        function timeInput(val) {
+          var i = document.createElement('input');
+          i.type = 'time';
+          i.className = 'cin cin-time';
+          i.value = val || '';
+          return i;
+        }
+        var fIn = timeInput(entry && entry.from);
+        var tIn = timeInput(entry && entry.to);
+        var fTd = el('td', 'e'); fTd.appendChild(fIn); tr.appendChild(fTd);
+        var tTd = el('td', 'e'); tTd.appendChild(tIn); tr.appendChild(tTd);
+
+        var exTd = el('td', 'c-extra', '');
+        tr.appendChild(exTd);
+
+        var nTd = el('td', 'e c-note');
+        var nIn = document.createElement('input');
+        nIn.type = 'text';
+        nIn.className = 'cin cin-note';
+        nIn.value = entry && entry.note ? entry.note : '';
+        nTd.appendChild(nIn);
+        tr.appendChild(nTd);
+
+        /* a confirmed day is locked for everyone except the admin */
+        var locked = state.mode === 'firebase' && entry && entry.confirmed && !state.admin;
+        if (locked) {
+          [uIn, fIn, tIn, nIn].forEach(function (i) { i.disabled = true; });
+          tr.classList.add('locked');
+        }
+
+        function refreshExtra(en) {
+          exTd.textContent = (en && en.status === 'worked' && weekend && +en.hours > 0)
+            ? '+' + fmtH(+en.hours) : '';
+        }
+        refreshExtra(entry);
+
+        /* filling both times auto-computes the hours, like the pop-up */
+        function onTimes() {
+          var auto = calcHours(fIn.value, tIn.value);
+          if (auto != null) uIn.value = fmtH(auto);
+        }
+        fIn.addEventListener('change', onTimes);
+        tIn.addEventListener('change', onTimes);
+
+        function saveRow() {
+          var raw = uIn.value.trim();
+          var from = fIn.value || '';
+          var to = tIn.value || '';
+          var note = nIn.value.trim();
+          var key = person.id + '_' + ds;
+          var existing = state.entries[key];
+          var isAdmin = !!state.admin;
+          if (state.mode === 'firebase' && existing && existing.confirmed && !isAdmin) {
+            showToast(L.t('confirmedLock'));
+            return;
+          }
+          var keepConf = !!(existing && existing.confirmed && isAdmin);
+
+          /* everything emptied: clear the day */
+          if (!raw && !from && !to && !note) {
+            if (!existing) return;
+            delete state.entries[key];
+            store.deleteEntry(key).catch(function () { showToast(L.t('toastClearFail')); });
+            uTd.className = 'e';
+            refreshExtra(null);
+            refreshFoot();
+            pendingRender = true;
+            return;
+          }
+
+          var numTxt = raw.replace(',', '.').replace(/[uh]\s*$/i, '');
+          var num = numTxt === '' ? NaN : +numTxt;
+          var en;
+          if (raw !== '' && isNaN(num)) {
+            /* a word (vrij, ziek, vak.) = not working that day */
+            en = { personId: person.id, date: ds, status: 'free', from: '', to: '', hours: 0, note: note, label: raw.slice(0, 20), confirmed: keepConf, editedByAdmin: isAdmin };
+          } else {
+            var h = !isNaN(num) ? num : (calcHours(from, to) || 0);
+            en = { personId: person.id, date: ds, status: 'worked', from: from, to: to, hours: Math.max(0, Math.min(24, h)), note: note, label: '', confirmed: keepConf, editedByAdmin: isAdmin };
+          }
+          if (existing &&
+            existing.status === en.status && +existing.hours === +en.hours &&
+            (existing.from || '') === en.from && (existing.to || '') === en.to &&
+            (existing.note || '') === en.note && (existing.label || '') === en.label) return;
+
+          state.entries[key] = en;
+          store.saveEntry(en).catch(function () { showToast(L.t('toastSaveFail')); });
+          uTd.className = 'e ' + (en.status === 'worked' ? 'u-worked' : 'u-free');
+          refreshExtra(en);
+          refreshFoot();
+          pendingRender = true;
+        }
+        [uIn, fIn, tIn, nIn].forEach(function (inp) {
+          inp.addEventListener('change', saveRow);
+        });
+
+        tbody.appendChild(tr);
+      })(day);
+    }
+    table.appendChild(tbody);
+
+    var tfoot = el('tfoot');
+    var fr = el('tr');
+    var lab = el('td', null, L.t('monthTotal'));
+    lab.colSpan = 2;
+    fr.appendChild(lab);
+    tfootBase = el('td', 'u-worked', '');
+    fr.appendChild(tfootBase);
+    tfootCounted = el('td', 'c-extra', '');
+    tfootCounted.colSpan = 4;
+    fr.appendChild(tfootCounted);
+    tfoot.appendChild(fr);
+    table.appendChild(tfoot);
+    refreshFoot();
+
+    card.appendChild(table);
+    return card;
   }
 
   function renderCalendar(person) {
@@ -509,7 +771,9 @@
     var ds = fmtDate(d);
     var inRange = ds >= startStr && ds <= endStr;
     var closed = isMonday(d);
-    var clickable = inRange && !closed;
+    var e = entryFor(person.id, ds);
+    var locked = state.mode === 'firebase' && e && e.confirmed && !state.admin;
+    var clickable = inRange && !closed && !locked;
 
     var cell = el(clickable ? 'button' : 'div', 'cell');
     if (clickable) {
@@ -527,6 +791,16 @@
     if (isWeekend(d) && inRange) {
       head.appendChild(el('span', 'badge-x2', '×2'));
     }
+    if (e && e.confirmed && inRange && !closed) {
+      var cbdg = el('span', 'badge-conf', '✓');
+      cbdg.title = L.t('confirmedLock');
+      head.appendChild(cbdg);
+    }
+    if (e && e.editedByAdmin && inRange && !closed) {
+      var abdg = el('span', 'badge-admin', '✎');
+      abdg.title = L.t('byAdmin');
+      head.appendChild(abdg);
+    }
     cell.appendChild(head);
 
     if (closed && inRange) {
@@ -535,7 +809,6 @@
     }
     if (!inRange) return cell;
 
-    var e = entryFor(person.id, ds);
     if (e) {
       if (e.status === 'worked') {
         var h = +e.hours || 0;
@@ -544,7 +817,7 @@
         cell.appendChild(chip);
         if (e.from && e.to) cell.appendChild(el('div', 'times', e.from + ' – ' + e.to));
       } else {
-        cell.appendChild(el('span', 'entry-chip free', L.t('free')));
+        cell.appendChild(el('span', 'entry-chip free', e.label || L.t('free')));
       }
       if (e.note) {
         var nm = el('div', 'notemark', '✎ ' + e.note);
@@ -576,6 +849,10 @@
       sub.appendChild(el('span', 'x2note', L.t('subWeekend')));
     } else {
       sub.appendChild(document.createTextNode(L.t('subWeekday')));
+    }
+    if (e && e.editedByAdmin) {
+      sub.appendChild(document.createTextNode(' · '));
+      sub.appendChild(el('span', 'x2note', L.t('byAdmin')));
     }
     editStatus = e ? e.status : 'worked';
     inFrom.value = e && e.from ? e.from : '';
@@ -621,6 +898,7 @@
   document.getElementById('btnCancelDay').addEventListener('click', closeDayModal);
   document.getElementById('btnSaveDay').addEventListener('click', function () {
     if (!editingDate || !state.personId) return;
+    var prevE = entryFor(state.personId, editingDate);
     var entry = {
       personId: state.personId,
       date: editingDate,
@@ -628,7 +906,10 @@
       from: editStatus === 'worked' ? (inFrom.value || '') : '',
       to: editStatus === 'worked' ? (inTo.value || '') : '',
       hours: editStatus === 'worked' ? Math.max(0, Math.min(24, +inHours.value || 0)) : 0,
-      note: inNote.value.trim()
+      note: inNote.value.trim(),
+      label: '',
+      confirmed: !!(prevE && prevE.confirmed && state.admin),
+      editedByAdmin: !!state.admin
     };
     if (entry.status === 'worked' && entry.hours === 0 && !entry.note) {
       showToast(L.t('toastHoursFirst'));
@@ -791,6 +1072,10 @@
   });
 
   /* ===================== boot ===================== */
+  try {
+    var ui0 = JSON.parse(localStorage.getItem(LS_UI) || '{}');
+    if (ui0.viewMode === 'list') state.viewMode = 'list';
+  } catch (e) { }
   L.applyStatic();
   render();
   initStorage();

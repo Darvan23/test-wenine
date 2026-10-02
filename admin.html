@@ -1,53 +1,46 @@
 <!-- ============================================================
-     Wenine Hours — page structure (HTML only)
-     Styling:  css/stylesheet.css
-     Behavior: script.js  (loaded at the bottom, after the markup)
+     Wenine Admin — the admin's control room.
+     One table per month: every person side by side with the hours
+     they logged. The admin checks a day, fixes it if needed, and
+     confirms it — confirmed days lock for everyone but the admin.
+     Styling:  css/stylesheet.css      Behavior: admin.js
      ============================================================ -->
 <meta charset="utf-8">
-<title>Wenine Hours</title>
+<title>Wenine Admin</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- Fonts: Young Serif for headings, IBM Plex Sans for everything else -->
-<link rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="css/stylesheet.css">
 
-<!-- ======================= main page ======================= -->
 <div class="wrap">
   <header class="top">
-    <h1 class="wordmark">Wenine <small data-i18n="subHours">stage hours</small></h1>
+    <h1 class="wordmark">Wenine <small data-i18n="subAdmin">admin dashboard</small></h1>
     <nav class="page-nav">
-      <a href="index.html" class="current" data-i18n="navHours">Hour tracker</a>
+      <a href="index.html" data-i18n="navHours">Hour tracker</a>
       <a href="schedule.html" data-i18n="navSchedule">Schedule</a>
-      <a href="admin.html" data-i18n="navAdmin">Admin</a>
+      <a href="admin.html" class="current" data-i18n="navAdmin">Admin</a>
     </nav>
     <select class="lang-sel" id="langSel" aria-label="Language">
       <option value="en">EN</option>
       <option value="nl">NL</option>
     </select>
-    <span class="storage-note" id="storageNote"></span>
+    <div class="admin-area" id="adminArea"></div>
   </header>
 
-  <!-- person chips + "add person" + the selected person's work period -->
-  <div class="people" id="peopleRow"></div>
-
-  <!-- summary tiles, month navigation and the calendar are rendered here by script.js -->
   <div id="mainArea"></div>
 </div>
 
-<!-- ================== day editor pop-up ==================== -->
+<!-- ============ day editor: check / fix / confirm ============ -->
 <div class="overlay hidden" id="dayOverlay" role="dialog" aria-modal="true" aria-labelledby="dayTitle">
   <div class="modal">
     <h3 id="dayTitle"></h3>
     <div class="modal-sub" id="daySub"></div>
 
-    <!-- worked / free toggle -->
     <div class="seg" id="statusSeg">
       <button type="button" class="worked" id="segWorked" data-i18n="worked">Worked</button>
       <button type="button" class="free" id="segFree" data-i18n="free">Free</button>
     </div>
 
-    <!-- times + hours (hours fill in automatically from the times) -->
     <div id="hoursBlock">
       <div class="row3">
         <div class="field">
@@ -63,13 +56,17 @@
           <input type="number" id="inHours" min="0" max="24" step="0.25" placeholder="0">
         </div>
       </div>
-      <div class="calc-line" id="calcLine"></div>
     </div>
 
     <div class="field">
       <label for="inNote" data-i18n="note">Note</label>
-      <textarea id="inNote" data-i18n-ph="notePh" placeholder="e.g. evening shift, event, school day…"></textarea>
+      <textarea id="inNote"></textarea>
     </div>
+
+    <label class="conf-row">
+      <input type="checkbox" id="chkConf">
+      <span data-i18n="confToggle">Confirmed — lock this day for everyone except the admin</span>
+    </label>
 
     <div class="modal-actions">
       <button class="btn danger" id="btnDeleteEntry" type="button" data-i18n="clearDay">Clear day</button>
@@ -80,39 +77,11 @@
   </div>
 </div>
 
-<!-- ================= person editor pop-up ================== -->
-<div class="overlay hidden" id="personOverlay" role="dialog" aria-modal="true" aria-labelledby="personTitle">
-  <div class="modal">
-    <h3 id="personTitle">Add person</h3>
-    <div class="modal-sub" data-i18n="personSub">Everyone gets their own calendar and totals.</div>
-    <div class="field">
-      <label for="inName" data-i18n="name">Name</label>
-      <input type="text" id="inName" data-i18n-ph="namePh" placeholder="Name" maxlength="40">
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label for="inStart" data-i18n="canFrom">Can work from</label>
-        <input type="date" id="inStart">
-      </div>
-      <div class="field">
-        <label for="inEnd" data-i18n="until">Until</label>
-        <input type="date" id="inEnd">
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn danger hidden" id="btnDeletePerson" type="button" data-i18n="removePerson">Remove person</button>
-      <span class="spacer"></span>
-      <button class="btn ghost" id="btnCancelPerson" type="button" data-i18n="cancel">Cancel</button>
-      <button class="btn primary" id="btnSavePerson" type="button" data-i18n="save">Save</button>
-    </div>
-  </div>
-</div>
-
 <!-- ================== admin login pop-up ==================== -->
 <div class="overlay hidden" id="loginOverlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
   <div class="modal">
     <h3 id="loginTitle" data-i18n="loginTitle">Admin login</h3>
-    <div class="modal-sub" data-i18n="loginSubPeople">Only admins can add or change people.</div>
+    <div class="modal-sub" data-i18n="loginSubAdmin">Only admins can open this dashboard.</div>
     <div class="field">
       <label for="inEmail" data-i18n="email">Email</label>
       <input type="email" id="inEmail" autocomplete="username" placeholder="admin@wenine.app">
@@ -129,8 +98,7 @@
   </div>
 </div>
 
-<!-- short status message shown at the bottom of the screen -->
 <div id="toast"></div>
 
 <script src="i18n.js"></script>
-<script src="script.js"></script>
+<script src="admin.js"></script>

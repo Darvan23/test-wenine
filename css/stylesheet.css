@@ -823,3 +823,115 @@ button.cell:hover {
   border-radius:8px; padding:5px 8px; font-size:13px; font-weight:600; cursor:pointer;
 }
 .lang-sel:hover{ color:var(--accent); border-color:var(--accent); }
+
+/* ============================================================
+   List view — compact month tables like the paper stage sheet
+   ============================================================ */
+
+/* calendar / list switch */
+.mode-seg{ display:inline-flex; gap:4px; background:var(--surface-2); border-radius:10px; padding:4px; }
+.mode-seg button{
+  border:none; background:transparent; border-radius:7px; padding:6px 14px;
+  font-weight:600; font-size:13px; color:var(--muted); cursor:pointer;
+}
+.mode-seg button.on{ background:var(--surface); color:var(--accent); box-shadow:0 1px 3px rgba(43,32,36,.18); }
+
+.listgrid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(350px, 1fr));
+  gap:16px; align-items:start;
+}
+.mcard{ border:1px solid var(--line); border-radius:12px; background:var(--surface); overflow:hidden; }
+.mcard h3{
+  font-family:'Young Serif',Georgia,serif; font-weight:400; font-size:16px;
+  margin:0; padding:10px 14px 8px; border-bottom:1px solid var(--line);
+}
+.mtab{ width:100%; border-collapse:collapse; font-size:12px; }
+.mtab th{
+  font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); text-align:left; padding:6px 8px 4px;
+  border-bottom:1px solid var(--line); background:var(--surface-2);
+}
+.mtab td{
+  padding:3px 8px; border-bottom:1px solid var(--line);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.mtab tbody tr{ cursor:pointer; }
+.mtab tbody tr:hover td{ background:var(--accent-soft); }
+.mtab tbody tr:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+.mtab .c-date{ color:var(--muted); }
+.mtab .wkd{ color:var(--gold); font-weight:600; }
+.mtab .u-worked{ color:var(--green); font-weight:700; }
+.mtab .u-free{ color:var(--muted); }
+.mtab .c-extra{ color:var(--gold); font-weight:600; }
+.mtab .c-note{
+  max-width:130px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; color:var(--muted);
+}
+.mtab .today-row td{ background:var(--accent-soft); }
+.mtab tfoot td{ font-weight:700; background:var(--surface-2); border-bottom:none; padding:6px 8px; }
+
+/* inline editing inside the list view — cells you type into directly */
+.mtab td.e{ padding:1px 4px; }
+.mtab .cin{
+  border:none; background:transparent; font:inherit; color:inherit;
+  width:100%; min-width:0; padding:2px 4px; border-radius:4px;
+}
+.mtab .cin:focus{ outline:none; background:var(--surface); box-shadow:inset 0 0 0 1.5px var(--accent); }
+.mtab .cin-uren{ width:56px; font-weight:700; }
+.mtab td.u-worked .cin-uren{ color:var(--green); }
+.mtab td.u-free .cin-uren{ color:var(--muted); font-weight:600; }
+.mtab .cin-time{ width:64px; }
+.mtab .cin-time::-webkit-calendar-picker-indicator{ display:none; }
+.mtab .cin-note{ min-width:100px; color:var(--muted); }
+.mtab tbody tr{ cursor:default; }
+.mtab tbody tr:hover td{ background:transparent; }
+.mtab .today-row td, .mtab .today-row:hover td{ background:var(--accent-soft); }
+
+/* ============================================================
+   Admin dashboard (admin.html)
+   ============================================================ */
+.dash-hint{ font-size:12.5px; color:var(--muted); margin:-6px 0 12px; }
+
+.adash{ width:100%; border-collapse:collapse; font-size:12px; }
+.adash th{
+  font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); text-align:left; padding:8px 10px 6px;
+  border-bottom:1px solid var(--line); background:var(--surface-2); white-space:nowrap;
+}
+.adash th.pcol{ font-size:12px; letter-spacing:0; text-transform:none; color:var(--ink); font-weight:700; }
+.adash td{
+  border-bottom:1px solid var(--line); border-right:1px solid var(--line);
+  padding:5px 10px; vertical-align:top; font-variant-numeric:tabular-nums;
+}
+.adash td:last-child{ border-right:none; }
+.adash .c-date{ color:var(--muted); white-space:nowrap; }
+.adash .wkd{ color:var(--gold); font-weight:600; }
+.adash .today-row td{ background:var(--accent-soft); }
+.acell{ cursor:pointer; min-width:92px; }
+.acell:hover{ background:var(--accent-soft); }
+.acell .h{ font-weight:700; color:var(--green); }
+.acell .t{ font-size:11px; color:var(--muted); }
+.acell .fr{ color:var(--muted); font-weight:600; }
+.acell.conf{ background:var(--green-soft); }
+.acell.offr{ background:var(--surface-2); cursor:default; }
+.bds{ display:flex; gap:5px; margin-top:1px; }
+.b-conf{ color:var(--green); font-weight:700; font-size:11px; }
+.b-admin{ color:var(--accent); font-size:11px; }
+.b-note{ color:var(--muted); font-size:13px; line-height:1; }
+.adash tfoot td{ font-weight:700; background:var(--surface-2); border-bottom:none; padding:7px 10px; }
+.adash tfoot .c-extra{ font-size:11px; }
+.btn.small{ padding:5px 10px; font-size:12px; border-radius:8px; font-weight:600; }
+
+/* confirm checkbox row in the admin day editor */
+.conf-row{
+  display:flex; gap:9px; align-items:flex-start; font-size:13px;
+  margin:2px 0 6px; cursor:pointer; color:var(--ink);
+}
+.conf-row input{ margin-top:3px; accent-color: var(--green); }
+
+/* confirmed / admin-edited markers on the tracker pages */
+.badge-conf{ margin-left:4px; color:var(--green); font-weight:700; font-size:11px; }
+.badge-admin{ margin-left:4px; color:var(--accent); font-size:11px; }
+.mtab .b-conf{ font-size:11px; }
+.mtab .b-admin{ font-size:11px; color:var(--accent); }
+.mtab tr.locked .cin{ color:var(--muted); }

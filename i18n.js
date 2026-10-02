@@ -40,6 +40,21 @@ window.WenineLang = (function () {
       weekTitle: 'Week of {d}: {b} h worked, counts as {c} h',
       countsAsTitle: 'Counts as {h} h (weekend ×2)',
 
+      viewCal: 'Calendar', viewList: 'List',
+      colDate: 'Date', colDay: 'Day', colExtra: '×2', monthTotal: 'Total:',
+
+      navAdmin: 'Admin', subAdmin: 'admin dashboard',
+      confirmed: 'confirmed',
+      confirmedLock: 'Confirmed by the admin — only the admin can change this.',
+      byAdmin: 'changed by admin',
+      confToggle: 'Confirmed — lock this day for everyone except the admin',
+      confirmMonth: 'Confirm month',
+      adminNeedLogin: 'Log in as admin to open the dashboard.',
+      loginSubAdmin: 'Only admins can open this dashboard.',
+      dashHint: 'Click a cell to check, change or confirm someone’s day.',
+      toastMonthConfirmed: 'Month confirmed — those days are now locked.',
+      toastNothingToConfirm: 'No filled days to confirm this month.',
+
       addPerson: '+ Add person', edit: 'Edit',
       emptyBig: 'No calendars yet', emptyText: 'Add a person to start tracking hours.',
 
@@ -119,6 +134,21 @@ window.WenineLang = (function () {
       inclBonus: 'incl. +{x} bonus',
       weekTitle: 'Week van {d}: {b} u gewerkt, telt als {c} u',
       countsAsTitle: 'Telt als {h} u (weekend ×2)',
+
+      viewCal: 'Kalender', viewList: 'Lijst',
+      colDate: 'Datum', colDay: 'Dag', colExtra: '×2', monthTotal: 'Totaal:',
+
+      navAdmin: 'Admin', subAdmin: 'admin-dashboard',
+      confirmed: 'bevestigd',
+      confirmedLock: 'Bevestigd door de admin — alleen de admin kan dit nog wijzigen.',
+      byAdmin: 'gewijzigd door admin',
+      confToggle: 'Bevestigd — vergrendel deze dag voor iedereen behalve de admin',
+      confirmMonth: 'Maand bevestigen',
+      adminNeedLogin: 'Log in als admin om het dashboard te openen.',
+      loginSubAdmin: 'Alleen admins kunnen dit dashboard openen.',
+      dashHint: 'Klik op een cel om iemands dag te controleren, aan te passen of te bevestigen.',
+      toastMonthConfirmed: 'Maand bevestigd — deze dagen zijn nu vergrendeld.',
+      toastNothingToConfirm: 'Geen ingevulde dagen om te bevestigen deze maand.',
 
       addPerson: '+ Persoon toevoegen', edit: 'Bewerken',
       emptyBig: 'Nog geen kalenders', emptyText: 'Voeg een persoon toe om uren bij te houden.',
