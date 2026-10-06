@@ -487,13 +487,31 @@
     var ids = Object.keys(state.people).sort(function (a, b) {
       return (state.people[a].name || '').localeCompare(state.people[b].name || '');
     });
-    ids.forEach(function (id) {
-      var p = state.people[id];
-      var b = el('button', 'chip' + (id === state.personId ? ' active' : ''), p.name);
-      b.type = 'button';
-      b.addEventListener('click', function () { selectPerson(id); });
-      row.appendChild(b);
-    });
+    /* a few people: one chip each. Many people: a dropdown, so the row
+       stays one line no matter how many students there are. */
+    if (ids.length > 8) {
+      var mineId = myPersonId();
+      var ordered = mineId ? [mineId].concat(ids.filter(function (i) { return i !== mineId; })) : ids;
+      var sel = document.createElement('select');
+      sel.className = 'person-select';
+      ordered.forEach(function (id) {
+        var o = document.createElement('option');
+        o.value = id;
+        o.textContent = state.people[id].name;
+        sel.appendChild(o);
+      });
+      sel.value = state.personId || '';
+      sel.addEventListener('change', function () { selectPerson(sel.value); });
+      row.appendChild(sel);
+    } else {
+      ids.forEach(function (id) {
+        var p = state.people[id];
+        var b = el('button', 'chip' + (id === state.personId ? ' active' : ''), p.name);
+        b.type = 'button';
+        b.addEventListener('click', function () { selectPerson(id); });
+        row.appendChild(b);
+      });
+    }
     if (canManagePeople()) {
       var add = el('button', 'chip add', L.t('addPerson'));
       add.type = 'button';

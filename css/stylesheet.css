@@ -956,3 +956,15 @@ button.cell:hover { background: var(--accent-soft); }
   .mtab .cin { color: #000; }
   .chip.active { background: #fff; color: #000; border-color: #000; }
 }
+
+/* person dropdown — used instead of chips when there are many students */
+.person-select {
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13.5px;
+  min-width: 220px;
+  cursor: pointer;
+}
