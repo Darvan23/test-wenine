@@ -54,6 +54,8 @@
   var entriesUnsub = null;
   var plannerUnsub = null;
   var peopleUnsub = null;
+  var badgeReqUnsub = null;
+  var pendingRequests = {};   // for the counter on the Rooster tab
   var localPlanner = {};   // planner settings per person (localStorage mode)
   var editingDate = null;
   var editingPersonId = null; // null = adding
@@ -176,8 +178,11 @@
           if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
           if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
           if (plannerUnsub) { plannerUnsub(); plannerUnsub = null; }
+          if (badgeReqUnsub) { badgeReqUnsub(); badgeReqUnsub = null; }
           state.people = {}; state.entries = {}; state.plan = null;
           state.personId = null; state.loaded = false;
+          pendingRequests = {};
+          updateNavBadge();
           render();
           return;
         }
@@ -197,6 +202,14 @@
             ensureSelection();
             render();
           }, function () { showToast(L.t('toastDbRules')); });
+        }
+        if (!badgeReqUnsub) {
+          badgeReqUnsub = fb.onSnapshot(fb.collection(fbDb, 'requests'), function (snap) {
+            var m = {};
+            snap.forEach(function (d) { m[d.id] = d.data(); });
+            pendingRequests = m;
+            updateNavBadge();
+          }, function () { });
         }
         render();
       });
@@ -352,6 +365,27 @@
     try {
       localStorage.setItem(LS_UI, JSON.stringify({ personId: state.personId, viewMode: state.viewMode }));
     } catch (e) { }
+  }
+
+  /* little counter on the Rooster tab: open requests waiting for a decision
+     (the admin sees all of them, a student sees their own) */
+  function updateNavBadge() {
+    var a = document.querySelector('.page-nav a[href="schedule.html"]');
+    if (!a) return;
+    var mine = myPersonId();
+    var n = 0;
+    Object.keys(pendingRequests).forEach(function (k) {
+      var r = pendingRequests[k];
+      if (r.status === 'pending' && (state.admin || r.personId === mine)) n++;
+    });
+    var b = a.querySelector('.nav-badge');
+    if (!n) { if (b) b.remove(); return; }
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'nav-badge';
+      a.appendChild(b);
+    }
+    b.textContent = n;
   }
 
   /* ===================== computations ===================== */
@@ -624,6 +658,16 @@
     var bar = el('div', 'monthbar');
     bar.appendChild(modeSeg());
     bar.appendChild(el('h2', null, shortDate(person.start) + ' – ' + shortDate(person.end)));
+    var pr = el('button', 'btn small', L.t('printBtn'));
+    pr.type = 'button';
+    pr.addEventListener('click', function () { window.print(); });
+    bar.appendChild(pr);
+    if (canEditPerson(person.id)) {
+      var pv = el('button', 'btn small', L.t('periodBtn'));
+      pv.type = 'button';
+      pv.addEventListener('click', openPeriod);
+      bar.appendChild(pv);
+    }
     bar.appendChild(buildLegend());
     return bar;
   }
@@ -1392,6 +1436,19 @@
     iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
     card.appendChild(go);
 
+    if (gateMode === 'login') {
+      var fp = el('button', 'btn ghost gate-switch', L.t('forgotPw'));
+      fp.type = 'button';
+      fp.addEventListener('click', function () {
+        var em = iE.value.trim();
+        if (!em) { showToast(L.t('toastFillEmail')); return; }
+        authFns.sendPasswordResetEmail(auth, em).then(function () {
+          showToast(L.t('toastResetSent', { e: em }));
+        }).catch(function (err) { showToast(authErrText(err)); });
+      });
+      card.appendChild(fp);
+    }
+
     var sw = el('button', 'btn ghost gate-switch', L.t(gateMode === 'login' ? 'gateRegisterQ' : 'gateLoginQ'));
     sw.type = 'button';
     sw.addEventListener('click', function () {
@@ -1410,6 +1467,56 @@
     if (code === 'auth/too-many-requests') return L.t('toastTooMany');
     return L.t('toastLoginFail');
   }
+
+  /* ============ mark a whole period as free (vacations) ============ */
+  var periodOverlay = document.getElementById('periodOverlay');
+
+  function openPeriod() {
+    if (!state.personId) return;
+    if (!canEditPerson(state.personId)) { showToast(L.t('toastNotYours')); return; }
+    var person = state.people[state.personId];
+    var t = todayStr();
+    document.getElementById('pdFrom').value = (t >= person.start && t <= person.end) ? t : person.start;
+    document.getElementById('pdTo').value = '';
+    document.getElementById('pdLabel').value = 'vak.';
+    periodOverlay.classList.remove('hidden');
+  }
+  function closePeriod() { periodOverlay.classList.add('hidden'); }
+
+  document.getElementById('btnCancelPeriod').addEventListener('click', closePeriod);
+  document.getElementById('btnSavePeriod').addEventListener('click', function () {
+    if (!state.personId || !canEditPerson(state.personId)) return;
+    var person = state.people[state.personId];
+    var f = document.getElementById('pdFrom').value;
+    var t = document.getElementById('pdTo').value;
+    var label = document.getElementById('pdLabel').value.trim() || 'vrij';
+    if (!f || !t) { showToast(L.t('toastDates')); return; }
+    if (t < f) { showToast(L.t('toastEndBeforeStart')); return; }
+    var isAdmin = !!state.admin;
+    var writes = [];
+    var d = parseDate(f);
+    var endD = parseDate(t);
+    var guard = 0;
+    while (d <= endD && guard < 370) {
+      guard++;
+      var ds = fmtDate(d);
+      if (ds >= person.start && ds <= person.end && !isMonday(d) && !entryFor(person.id, ds)) {
+        var en = {
+          personId: person.id, date: ds, status: 'free',
+          from: '', to: '', hours: 0, note: '',
+          label: label, confirmed: false, editedByAdmin: isAdmin
+        };
+        state.entries[person.id + '_' + ds] = en;
+        writes.push(store.saveEntry(en));
+      }
+      d = addDays(d, 1);
+    }
+    Promise.all(writes).then(function () {
+      showToast(L.t('toastPeriodDone', { n: writes.length }));
+      closePeriod();
+      render();
+    }).catch(function () { showToast(L.t('toastSaveFail')); });
+  });
 
   /* ===================== profile ===================== */
   var profileOverlay = document.getElementById('profileOverlay');
@@ -1464,12 +1571,13 @@
   });
 
   /* ===================== shared UI ===================== */
-  [dayOverlay, personOverlay, profileOverlay].forEach(function (ov) {
+  [dayOverlay, personOverlay, profileOverlay, periodOverlay].forEach(function (ov) {
     ov.addEventListener('mousedown', function (ev) {
       if (ev.target === ov) {
         if (ov === dayOverlay) closeDayModal();
         else if (ov === personOverlay) closePersonModal();
-        else closeProfile();
+        else if (ov === profileOverlay) closeProfile();
+        else closePeriod();
       }
     });
   });
@@ -1478,6 +1586,7 @@
       if (!dayOverlay.classList.contains('hidden')) closeDayModal();
       if (!personOverlay.classList.contains('hidden')) closePersonModal();
       if (!profileOverlay.classList.contains('hidden')) closeProfile();
+      if (!periodOverlay.classList.contains('hidden')) closePeriod();
     }
   });
 

@@ -120,6 +120,33 @@
   </div>
 </div>
 
+<!-- ============ mark-period-free pop-up (vacations) ============ -->
+<div class="overlay hidden" id="periodOverlay" role="dialog" aria-modal="true" aria-labelledby="periodTitle">
+  <div class="modal">
+    <h3 id="periodTitle" data-i18n="periodBtn">Mark period free</h3>
+    <div class="modal-sub" data-i18n="periodSub">Marks every open day in the period as free. Days that already have something filled in are left alone.</div>
+    <div class="row2">
+      <div class="field">
+        <label for="pdFrom" data-i18n="from">From</label>
+        <input type="date" id="pdFrom">
+      </div>
+      <div class="field">
+        <label for="pdTo" data-i18n="to">To</label>
+        <input type="date" id="pdTo">
+      </div>
+    </div>
+    <div class="field">
+      <label for="pdLabel" data-i18n="periodLabel">Word in the hours column</label>
+      <input type="text" id="pdLabel" maxlength="20" placeholder="vak.">
+    </div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btnCancelPeriod" type="button" data-i18n="cancel">Cancel</button>
+      <button class="btn primary" id="btnSavePeriod" type="button" data-i18n="save">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= profile pop-up ================== -->
 <div class="overlay hidden" id="profileOverlay" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
   <div class="modal">

@@ -95,6 +95,7 @@
           if (schedUnsub) { schedUnsub(); schedUnsub = null; }
           if (reqUnsub) { reqUnsub(); reqUnsub = null; }
           state.people = {}; state.sched = {}; state.requests = {}; state.ready = false;
+          updateNavBadge();
           renderAdminArea();
           render();
           return;
@@ -120,6 +121,7 @@
             var m = {};
             snap.forEach(function (d) { m[d.id] = d.data(); });
             state.requests = m;
+            updateNavBadge();
             render();
           }, function () { });
         }
@@ -185,6 +187,26 @@
     out.title = state.user.email || '';
     out.addEventListener('click', function () { authFns.signOut(auth); });
     area.appendChild(out);
+  }
+
+  /* little counter on the Rooster tab: pending requests */
+  function updateNavBadge() {
+    var a = document.querySelector('.page-nav a[href="schedule.html"]');
+    if (!a) return;
+    var mine = myPersonId();
+    var n = 0;
+    Object.keys(state.requests || {}).forEach(function (k) {
+      var r = state.requests[k];
+      if (r.status === 'pending' && (state.admin || r.personId === mine)) n++;
+    });
+    var b = a.querySelector('.nav-badge');
+    if (!n) { if (b) b.remove(); return; }
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'nav-badge';
+      a.appendChild(b);
+    }
+    b.textContent = n;
   }
 
   /* which calendar belongs to the logged-in student? */
@@ -495,6 +517,21 @@
         return fb.setDoc(fb.doc(fbDb, 'schedule', r.personId + '_' + r.date), {
           personId: r.personId, date: r.date, status: 'free', from: '', to: ''
         });
+      }).then(function () {
+        /* also mark the day in the hour tracker, so the calendar, the
+           planner and the rooster all tell the same story — but never
+           overwrite hours the student already logged */
+        var eref = fb.doc(fbDb, 'entries', r.personId + '_' + r.date);
+        return fb.getDoc(eref).then(function (s) {
+          if (s.exists()) return;
+          return fb.setDoc(eref, {
+            personId: r.personId, date: r.date, status: 'free',
+            from: '', to: '', hours: 0,
+            note: r.note || '',
+            label: r.type === 'sick' ? 'ziek' : 'vrij',
+            confirmed: false, editedByAdmin: true
+          });
+        });
       });
     }
     p.then(function () {
@@ -536,6 +573,17 @@
     go.addEventListener('click', submit);
     iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
     card.appendChild(go);
+
+    var fp = el('button', 'btn ghost gate-switch', L.t('forgotPw'));
+    fp.type = 'button';
+    fp.addEventListener('click', function () {
+      var em = iE.value.trim();
+      if (!em) { showToast(L.t('toastFillEmail')); return; }
+      authFns.sendPasswordResetEmail(auth, em).then(function () {
+        showToast(L.t('toastResetSent', { e: em }));
+      }).catch(function (err) { showToast(authErrText(err)); });
+    });
+    card.appendChild(fp);
     /* registration (with the full student form) lives on the tracker page */
     var sw = el('button', 'btn ghost gate-switch', L.t('gateRegisterQ'));
     sw.type = 'button';

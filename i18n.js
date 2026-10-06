@@ -124,6 +124,16 @@ window.WenineLang = (function () {
       toastLoginFail: 'Login failed. Is this website on the authorized domains list?',
       toastLoggedIn: 'Logged in.',
 
+      forgotPw: 'Forgot password?',
+      toastResetSent: 'Password-reset email sent to {e} — check your inbox.',
+      toastFillEmail: 'Fill in your email first, then click “forgot password”.',
+      printBtn: 'Print',
+      backupBtn: 'Download backup',
+      periodBtn: 'Mark period free',
+      periodSub: 'Marks every open day in the period as free. Days that already have something filled in are left alone.',
+      periodLabel: 'Word in the hours column',
+      toastPeriodDone: '{n} days marked.',
+
       gateTitle: 'Log in',
       gateSub: 'Log in to see the Wenine hours. Students and admin each use their own account.',
       gateRegisterQ: 'First time here? Create your account',
@@ -272,6 +282,16 @@ window.WenineLang = (function () {
       toastTooMany: 'Te veel pogingen — wacht een paar minuten.',
       toastLoginFail: 'Inloggen mislukt. Staat deze website in de lijst met toegestane domeinen?',
       toastLoggedIn: 'Ingelogd.',
+
+      forgotPw: 'Wachtwoord vergeten?',
+      toastResetSent: 'Reset-e-mail verstuurd naar {e} — check je inbox.',
+      toastFillEmail: 'Vul eerst je e-mailadres in en klik dan op “wachtwoord vergeten”.',
+      printBtn: 'Printen',
+      backupBtn: 'Back-up downloaden',
+      periodBtn: 'Periode vrij markeren',
+      periodSub: 'Markeert elke open dag in de periode als vrij. Dagen die al ingevuld zijn blijven staan.',
+      periodLabel: 'Woord in de urenkolom',
+      toastPeriodDone: '{n} dagen gemarkeerd.',
 
       gateTitle: 'Inloggen',
       gateSub: 'Log in om de Wenine-uren te zien. Studenten en admin gebruiken elk hun eigen account.',

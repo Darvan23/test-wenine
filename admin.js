@@ -40,6 +40,8 @@
   var entriesUnsub = null;
   var peopleUnsub = null;
   var accountsUnsub = null;
+  var reqUnsub = null;
+  var pendingRequests = {};
   var editingDate = null;
   var editingPerson = null;
   var editStatus = 'worked';
@@ -93,6 +95,9 @@
           if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
           if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
           if (accountsUnsub) { accountsUnsub(); accountsUnsub = null; }
+          if (reqUnsub) { reqUnsub(); reqUnsub = null; }
+          pendingRequests = {};
+          updateNavBadge();
           state.people = {}; state.entries = {}; state.accounts = {}; state.ready = false;
           renderAdminArea();
           render();
@@ -118,6 +123,14 @@
                 snap.forEach(function (d) { m[d.id] = d.data(); });
                 state.accounts = m;
                 render();
+              }, function () { });
+            }
+            if (!reqUnsub) {
+              reqUnsub = fb.onSnapshot(fb.collection(fbDb, 'requests'), function (snap) {
+                var m = {};
+                snap.forEach(function (d) { m[d.id] = d.data(); });
+                pendingRequests = m;
+                updateNavBadge();
               }, function () { });
             }
           }
@@ -209,6 +222,49 @@
     main.appendChild(renderStudents());
   }
 
+  /* counter on the Rooster tab: pending requests waiting for a decision */
+  function updateNavBadge() {
+    var a = document.querySelector('.page-nav a[href="schedule.html"]');
+    if (!a) return;
+    var n = 0;
+    if (state.admin) {
+      Object.keys(pendingRequests).forEach(function (k) {
+        if (pendingRequests[k].status === 'pending') n++;
+      });
+    }
+    var b = a.querySelector('.nav-badge');
+    if (!n) { if (b) b.remove(); return; }
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'nav-badge';
+      a.appendChild(b);
+    }
+    b.textContent = n;
+  }
+
+  /* one JSON file with the complete database — keep it somewhere safe */
+  function downloadBackup() {
+    var cols = ['people', 'entries', 'schedule', 'planner', 'requests', 'accounts'];
+    Promise.all(cols.map(function (c) {
+      return fb.getDocs(fb.collection(fbDb, c)).then(function (snap) {
+        var m = {};
+        snap.forEach(function (d) { m[d.id] = d.data(); });
+        return m;
+      });
+    })).then(function (res) {
+      var out = { exportedAt: todayStr() };
+      cols.forEach(function (c, i) { out[c] = res[i]; });
+      var blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'wenine-backup-' + todayStr() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    }).catch(function () { showToast(L.t('toastSaveFail')); });
+  }
+
   /* every registered account with the details filled in at sign-up */
   function renderStudents() {
     var box = el('div', 'plan-card req-box');
@@ -269,6 +325,11 @@
     bar.appendChild(navBtn('‹', -1, L.t('prevMonth')));
     bar.appendChild(el('h2', null, MONTHS[state.view.m] + ' ' + state.view.y));
     bar.appendChild(navBtn('›', 1, L.t('nextMonth')));
+
+    var bk = el('button', 'btn small', L.t('backupBtn'));
+    bk.type = 'button';
+    bk.addEventListener('click', downloadBackup);
+    bar.appendChild(bk);
 
     var legend = el('div', 'legend');
     legend.appendChild(el('span', 'key', '✓ ' + L.t('confirmed')));
@@ -526,6 +587,17 @@
     go.addEventListener('click', submit);
     iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
     card.appendChild(go);
+
+    var fp = el('button', 'btn ghost gate-switch', L.t('forgotPw'));
+    fp.type = 'button';
+    fp.addEventListener('click', function () {
+      var em = iE.value.trim();
+      if (!em) { showToast(L.t('toastFillEmail')); return; }
+      authFns.sendPasswordResetEmail(auth, em).then(function () {
+        showToast(L.t('toastResetSent', { e: em }));
+      }).catch(function (err) { showToast(authErrText(err)); });
+    });
+    card.appendChild(fp);
     /* registration (with the full student form) lives on the tracker page */
     var sw = el('button', 'btn ghost gate-switch', L.t('gateRegisterQ'));
     sw.type = 'button';

@@ -922,3 +922,37 @@ button.cell:hover { background: var(--accent-soft); }
   .modal h3 { font-size: 16px; }
   .gate-card { margin-top: 32px; }
 }
+
+/* pending-request counter on the Rooster tab */
+.nav-badge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ---------- print: clean month sheets ---------- */
+@media print {
+  body { background: #fff; color: #000; }
+  .page-nav, .lang-sel, .storage-note, .admin-area, .icon-btn, .chip.add,
+  .nav-btn, .mode-seg, .monthbar .legend, .btn, .req-box, .dash-hint,
+  #toast, .overlay { display: none !important; }
+  .wrap { padding: 0; max-width: none; }
+  header.top { border-color: #999; }
+  .summary, .mcard, .cal-scroll, .plan-card {
+    box-shadow: none;
+    border-color: #aaa;
+    break-inside: avoid;
+  }
+  .listgrid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mtab th { background: #eee; }
+  .mtab .cin { color: #000; }
+  .chip.active { background: #fff; color: #000; border-color: #000; }
+}
