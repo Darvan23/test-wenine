@@ -1244,8 +1244,11 @@
     if (state.mode === 'firebase' && fbDb) {
       fb.getDocs(fb.collection(fbDb, 'accounts')).then(function (snap) {
         snap.forEach(function (d) {
+          var a = d.data() || {};
           var o = document.createElement('option');
-          o.value = (d.data() && d.data().email) || d.id;
+          o.value = a.email || d.id;
+          var nm = ((a.firstName || '') + ' ' + (a.lastName || '')).trim();
+          if (nm) o.label = nm;
           dl.appendChild(o);
         });
       }).catch(function () { });
@@ -1307,9 +1310,33 @@
   var gateMode = 'login'; // 'login' | 'register'
   function renderGate(main) {
     main.textContent = '';
-    var card = el('div', 'gate-card');
+    var card = el('div', 'gate-card' + (gateMode === 'register' ? ' wide' : ''));
     card.appendChild(el('h3', null, L.t(gateMode === 'login' ? 'gateTitle' : 'registerBtn')));
     card.appendChild(el('div', 'modal-sub', L.t('gateSub')));
+
+    /* registration asks for the student's details, stored with the account */
+    var extra = null;
+    if (gateMode === 'register') {
+      extra = {};
+      var grid = el('div', 'gate-grid');
+      function gf(key, type) {
+        var f = el('div', 'field');
+        f.appendChild(el('label', null, L.t(key)));
+        var i = document.createElement('input');
+        i.type = type;
+        f.appendChild(i);
+        grid.appendChild(f);
+        extra[key] = i;
+      }
+      gf('firstName', 'text');
+      gf('lastName', 'text');
+      gf('birthDate', 'date');
+      gf('phone', 'tel');
+      gf('school', 'text');
+      gf('program', 'text');
+      gf('schoolYear', 'text');
+      card.appendChild(grid);
+    }
 
     var fE = el('div', 'field');
     fE.appendChild(el('label', null, L.t('email')));
@@ -1329,9 +1356,28 @@
     function submit() {
       var em = iE.value.trim(), pw = iP.value;
       if (!em || !pw) { showToast(L.t('toastFill')); return; }
-      var p = gateMode === 'login'
-        ? authFns.signInWithEmailAndPassword(auth, em, pw)
-        : authFns.createUserWithEmailAndPassword(auth, em, pw);
+      var p;
+      if (gateMode === 'login') {
+        p = authFns.signInWithEmailAndPassword(auth, em, pw);
+      } else {
+        if (!extra.firstName.value.trim() || !extra.lastName.value.trim()) {
+          showToast(L.t('toastName'));
+          return;
+        }
+        p = authFns.createUserWithEmailAndPassword(auth, em, pw).then(function () {
+          /* save the student's details on their account record */
+          return fb.setDoc(fb.doc(fbDb, 'accounts', em.toLowerCase()), {
+            email: em.toLowerCase(),
+            firstName: extra.firstName.value.trim(),
+            lastName: extra.lastName.value.trim(),
+            birthDate: extra.birthDate.value || '',
+            phone: extra.phone.value.trim(),
+            school: extra.school.value.trim(),
+            program: extra.program.value.trim(),
+            schoolYear: extra.schoolYear.value.trim()
+          });
+        });
+      }
       p.then(function () {
         showToast(L.t(gateMode === 'login' ? 'toastLoggedIn' : 'toastRegistered'));
       }).catch(function (err) { showToast(authErrText(err)); });

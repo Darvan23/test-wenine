@@ -1090,3 +1090,9 @@ button.cell:hover {
 .badge-st.pending{ background:var(--gold-soft); color:var(--gold); }
 .badge-st.approved{ background:var(--green-soft); color:var(--green); }
 .badge-st.rejected{ background:var(--accent-soft); color:var(--danger); }
+
+/* registration form grid + scrollable detail tables */
+.gate-card.wide{ max-width:560px; }
+.gate-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
+@media (max-width:560px){ .gate-grid{ grid-template-columns:1fr; } }
+.tbl-wrap{ overflow-x:auto; }

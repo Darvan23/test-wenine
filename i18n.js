@@ -136,6 +136,11 @@ window.WenineLang = (function () {
       noPersonLinked: 'Your account ({e}) is not linked to a calendar yet — ask the admin to add your email to your profile.',
       personEmail: 'Student email (for their login)',
 
+      firstName: 'First name', lastName: 'Last name',
+      birthDate: 'Date of birth', phone: 'Phone number',
+      school: 'School', program: 'Study programme', schoolYear: 'School year',
+      studentsTitle: 'Students', linkedTo: 'Linked calendar',
+
       reqTitle: 'Requests',
       reqNew: 'New request',
       reqTypeFree: 'Day off',
@@ -275,6 +280,11 @@ window.WenineLang = (function () {
       toastNotYours: 'Je kunt alleen je eigen kalender wijzigen.',
       noPersonLinked: 'Je account ({e}) is nog niet gekoppeld aan een kalender — vraag de admin om je e-mail aan je profiel toe te voegen.',
       personEmail: 'E-mail student (voor hun login)',
+
+      firstName: 'Voornaam', lastName: 'Achternaam',
+      birthDate: 'Geboortedatum', phone: 'Telefoonnummer',
+      school: 'School', program: 'Opleiding', schoolYear: 'Schooljaar',
+      studentsTitle: 'Studenten', linkedTo: 'Gekoppelde kalender',
 
       reqTitle: 'Aanvragen',
       reqNew: 'Nieuwe aanvraag',

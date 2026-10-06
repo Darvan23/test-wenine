@@ -33,11 +33,13 @@
     view: null,     // {y,m}
     user: null,
     admin: null,
+    accounts: {},   // registered accounts with their sign-up details
     ready: false
   };
   var fb = null, fbDb = null, authFns = null, auth = null;
   var entriesUnsub = null;
   var peopleUnsub = null;
+  var accountsUnsub = null;
   var editingDate = null;
   var editingPerson = null;
   var editStatus = 'worked';
@@ -90,7 +92,8 @@
         if (!user) {
           if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
           if (entriesUnsub) { entriesUnsub(); entriesUnsub = null; }
-          state.people = {}; state.entries = {}; state.ready = false;
+          if (accountsUnsub) { accountsUnsub(); accountsUnsub = null; }
+          state.people = {}; state.entries = {}; state.accounts = {}; state.ready = false;
           renderAdminArea();
           render();
           return;
@@ -109,6 +112,14 @@
               }, function () { showToast(L.t('toastStaff')); });
             }
             subscribeMonth();
+            if (!accountsUnsub) {
+              accountsUnsub = fb.onSnapshot(fb.collection(fbDb, 'accounts'), function (snap) {
+                var m = {};
+                snap.forEach(function (d) { m[d.id] = d.data(); });
+                state.accounts = m;
+                render();
+              }, function () { });
+            }
           }
           renderAdminArea();
           render();
@@ -195,6 +206,49 @@
     main.appendChild(renderMonthbar());
     main.appendChild(el('div', 'dash-hint', L.t('dashHint')));
     main.appendChild(renderDashboard());
+    main.appendChild(renderStudents());
+  }
+
+  /* every registered account with the details filled in at sign-up */
+  function renderStudents() {
+    var box = el('div', 'plan-card req-box');
+    box.appendChild(el('h3', null, L.t('studentsTitle')));
+    var ids = Object.keys(state.accounts).sort();
+    if (!ids.length) {
+      box.appendChild(el('div', 'modal-sub', '—'));
+      return box;
+    }
+    var wrap = el('div', 'tbl-wrap');
+    var tbl = el('table', 'mtab');
+    var th = el('thead');
+    var hr = el('tr');
+    [L.t('name'), L.t('email'), L.t('birthDate'), L.t('phone'), L.t('school'), L.t('program'), L.t('schoolYear'), L.t('linkedTo')]
+      .forEach(function (h) { hr.appendChild(el('th', null, h)); });
+    th.appendChild(hr);
+    tbl.appendChild(th);
+    var tb = el('tbody');
+    ids.forEach(function (id) {
+      var a = state.accounts[id] || {};
+      var em = (a.email || id).toLowerCase();
+      var linked = null;
+      Object.keys(state.people).forEach(function (pid) {
+        if ((state.people[pid].email || '').toLowerCase() === em) linked = state.people[pid].name;
+      });
+      var tr = el('tr');
+      tr.appendChild(el('td', null, ((a.firstName || '') + ' ' + (a.lastName || '')).trim() || '—'));
+      tr.appendChild(el('td', null, em));
+      tr.appendChild(el('td', null, a.birthDate || ''));
+      tr.appendChild(el('td', null, a.phone || ''));
+      tr.appendChild(el('td', null, a.school || ''));
+      tr.appendChild(el('td', null, a.program || ''));
+      tr.appendChild(el('td', null, a.schoolYear || ''));
+      tr.appendChild(el('td', linked ? 'u-worked' : null, linked || '—'));
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    wrap.appendChild(tbl);
+    box.appendChild(wrap);
+    return box;
   }
 
   function renderMonthbar() {
@@ -472,12 +526,10 @@
     go.addEventListener('click', submit);
     iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
     card.appendChild(go);
-    var sw = el('button', 'btn ghost gate-switch', L.t(gateMode === 'login' ? 'gateRegisterQ' : 'gateLoginQ'));
+    /* registration (with the full student form) lives on the tracker page */
+    var sw = el('button', 'btn ghost gate-switch', L.t('gateRegisterQ'));
     sw.type = 'button';
-    sw.addEventListener('click', function () {
-      gateMode = gateMode === 'login' ? 'register' : 'login';
-      render();
-    });
+    sw.addEventListener('click', function () { location.href = 'index.html'; });
     card.appendChild(sw);
     main.appendChild(card);
   }

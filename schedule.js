@@ -536,12 +536,10 @@
     go.addEventListener('click', submit);
     iP.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
     card.appendChild(go);
-    var sw = el('button', 'btn ghost gate-switch', L.t(gateMode === 'login' ? 'gateRegisterQ' : 'gateLoginQ'));
+    /* registration (with the full student form) lives on the tracker page */
+    var sw = el('button', 'btn ghost gate-switch', L.t('gateRegisterQ'));
     sw.type = 'button';
-    sw.addEventListener('click', function () {
-      gateMode = gateMode === 'login' ? 'register' : 'login';
-      render();
-    });
+    sw.addEventListener('click', function () { location.href = 'index.html'; });
     card.appendChild(sw);
     main.appendChild(card);
   }
