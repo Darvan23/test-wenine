@@ -11,6 +11,7 @@
 <link rel="stylesheet"
   href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="css/stylesheet.css">
+<script src="theme.js"></script>
 
 <!-- ======================= main page ======================= -->
 <div class="wrap">
@@ -24,6 +25,11 @@
     <select class="lang-sel" id="langSel" aria-label="Language">
       <option value="en">EN</option>
       <option value="nl">NL</option>
+    </select>
+    <select class="lang-sel" id="themeSel" aria-label="Theme">
+      <option value="auto" data-i18n="themeAuto">Auto</option>
+      <option value="light" data-i18n="themeLight">Light</option>
+      <option value="dark" data-i18n="themeDark">Dark</option>
     </select>
     <span class="storage-note" id="storageNote"></span>
   </header>

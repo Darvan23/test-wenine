@@ -575,6 +575,11 @@
     langSel.value = L.get();
     langSel.addEventListener('change', function () { L.set(langSel.value); });
   }
+  var themeSel = document.getElementById('themeSel');
+  if (themeSel && window.WenineTheme) {
+    themeSel.value = window.WenineTheme.get();
+    themeSel.addEventListener('change', function () { window.WenineTheme.set(themeSel.value); });
+  }
   L.onChange(function () {
     DAY_NAMES = L.arr('dayNamesFull');
     DAY_SHORT = L.arr('dayShort');
