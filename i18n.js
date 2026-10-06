@@ -140,6 +140,9 @@ window.WenineLang = (function () {
       birthDate: 'Date of birth', phone: 'Phone number',
       school: 'School', program: 'Study programme', schoolYear: 'School year',
       studentsTitle: 'Students', linkedTo: 'Linked calendar',
+      profileBtn: 'Profile', profileTitle: 'My profile',
+      profileLinked: 'Linked calendar',
+      toastSavedProfile: 'Profile saved.',
 
       reqTitle: 'Requests',
       reqNew: 'New request',
@@ -285,6 +288,9 @@ window.WenineLang = (function () {
       birthDate: 'Geboortedatum', phone: 'Telefoonnummer',
       school: 'School', program: 'Opleiding', schoolYear: 'Schooljaar',
       studentsTitle: 'Studenten', linkedTo: 'Gekoppelde kalender',
+      profileBtn: 'Profiel', profileTitle: 'Mijn profiel',
+      profileLinked: 'Gekoppelde kalender',
+      toastSavedProfile: 'Profiel opgeslagen.',
 
       reqTitle: 'Aanvragen',
       reqNew: 'Nieuwe aanvraag',

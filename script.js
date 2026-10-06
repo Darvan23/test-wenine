@@ -481,6 +481,10 @@
     }
     if (state.mode === 'firebase' && state.user) {
       if (state.admin) meta.appendChild(el('span', 'admin-pill on', L.t('adminOn')));
+      var pb = el('button', 'icon-btn', L.t('profileBtn'));
+      pb.type = 'button';
+      pb.addEventListener('click', openProfile);
+      meta.appendChild(pb);
       var ab = el('button', 'icon-btn', L.t('logout'));
       ab.type = 'button';
       ab.title = state.user.email || '';
@@ -1407,12 +1411,65 @@
     return L.t('toastLoginFail');
   }
 
+  /* ===================== profile ===================== */
+  var profileOverlay = document.getElementById('profileOverlay');
+  function pfEl(id) { return document.getElementById(id); }
+
+  function openProfile() {
+    if (state.mode !== 'firebase' || !state.user || !state.user.email) return;
+    var em = state.user.email.toLowerCase();
+    pfEl('pfEmail').textContent = em;
+    var mine = myPersonId();
+    var lp = mine ? state.people[mine] : null;
+    pfEl('pfLinked').textContent = lp
+      ? L.t('profileLinked') + ': ' + lp.name + ' · ' + shortDate(lp.start) + ' – ' + shortDate(lp.end)
+      : (state.admin ? 'Admin' : L.t('profileLinked') + ': —');
+    ['pfFirst', 'pfLast', 'pfBirth', 'pfPhone', 'pfSchool', 'pfProgram', 'pfYear'].forEach(function (id) {
+      pfEl(id).value = '';
+    });
+    pfEl('pfAvatar').textContent = em.charAt(0).toUpperCase();
+    fb.getDoc(fb.doc(fbDb, 'accounts', em)).then(function (s) {
+      var a = s.exists() ? (s.data() || {}) : {};
+      pfEl('pfFirst').value = a.firstName || '';
+      pfEl('pfLast').value = a.lastName || '';
+      pfEl('pfBirth').value = a.birthDate || '';
+      pfEl('pfPhone').value = a.phone || '';
+      pfEl('pfSchool').value = a.school || '';
+      pfEl('pfProgram').value = a.program || '';
+      pfEl('pfYear').value = a.schoolYear || '';
+      var ini = ((a.firstName || em).charAt(0) + (a.lastName || '').charAt(0)).toUpperCase();
+      pfEl('pfAvatar').textContent = ini;
+    }).catch(function () { });
+    profileOverlay.classList.remove('hidden');
+  }
+  function closeProfile() { profileOverlay.classList.add('hidden'); }
+
+  document.getElementById('btnCancelProfile').addEventListener('click', closeProfile);
+  document.getElementById('btnSaveProfile').addEventListener('click', function () {
+    if (state.mode !== 'firebase' || !state.user || !state.user.email) return;
+    var em = state.user.email.toLowerCase();
+    fb.setDoc(fb.doc(fbDb, 'accounts', em), {
+      email: em,
+      firstName: pfEl('pfFirst').value.trim(),
+      lastName: pfEl('pfLast').value.trim(),
+      birthDate: pfEl('pfBirth').value || '',
+      phone: pfEl('pfPhone').value.trim(),
+      school: pfEl('pfSchool').value.trim(),
+      program: pfEl('pfProgram').value.trim(),
+      schoolYear: pfEl('pfYear').value.trim()
+    }).then(function () {
+      showToast(L.t('toastSavedProfile'));
+      closeProfile();
+    }).catch(function () { showToast(L.t('toastSaveFail')); });
+  });
+
   /* ===================== shared UI ===================== */
-  [dayOverlay, personOverlay].forEach(function (ov) {
+  [dayOverlay, personOverlay, profileOverlay].forEach(function (ov) {
     ov.addEventListener('mousedown', function (ev) {
       if (ev.target === ov) {
         if (ov === dayOverlay) closeDayModal();
-        else closePersonModal();
+        else if (ov === personOverlay) closePersonModal();
+        else closeProfile();
       }
     });
   });
@@ -1420,6 +1477,7 @@
     if (ev.key === 'Escape') {
       if (!dayOverlay.classList.contains('hidden')) closeDayModal();
       if (!personOverlay.classList.contains('hidden')) closePersonModal();
+      if (!profileOverlay.classList.contains('hidden')) closeProfile();
     }
   });
 

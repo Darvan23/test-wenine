@@ -114,6 +114,55 @@
   </div>
 </div>
 
+<!-- ================= profile pop-up ================== -->
+<div class="overlay hidden" id="profileOverlay" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+  <div class="modal">
+    <h3 id="profileTitle" data-i18n="profileTitle">My profile</h3>
+    <div class="pf-head">
+      <div class="pf-avatar" id="pfAvatar">?</div>
+      <div>
+        <div class="pf-name" id="pfEmail"></div>
+        <div class="pf-sub" id="pfLinked"></div>
+      </div>
+    </div>
+    <div class="gate-grid">
+      <div class="field">
+        <label for="pfFirst" data-i18n="firstName">First name</label>
+        <input type="text" id="pfFirst">
+      </div>
+      <div class="field">
+        <label for="pfLast" data-i18n="lastName">Last name</label>
+        <input type="text" id="pfLast">
+      </div>
+      <div class="field">
+        <label for="pfBirth" data-i18n="birthDate">Date of birth</label>
+        <input type="date" id="pfBirth">
+      </div>
+      <div class="field">
+        <label for="pfPhone" data-i18n="phone">Phone number</label>
+        <input type="tel" id="pfPhone">
+      </div>
+      <div class="field">
+        <label for="pfSchool" data-i18n="school">School</label>
+        <input type="text" id="pfSchool">
+      </div>
+      <div class="field">
+        <label for="pfProgram" data-i18n="program">Study programme</label>
+        <input type="text" id="pfProgram">
+      </div>
+      <div class="field">
+        <label for="pfYear" data-i18n="schoolYear">School year</label>
+        <input type="text" id="pfYear">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btnCancelProfile" type="button" data-i18n="cancel">Cancel</button>
+      <button class="btn primary" id="btnSaveProfile" type="button" data-i18n="save">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- short status message shown at the bottom of the screen -->
 <div id="toast"></div>
 
